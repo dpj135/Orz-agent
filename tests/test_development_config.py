@@ -27,3 +27,9 @@ def test_check_tools_are_pinned_in_dev_dependencies():
     dev = config["project"]["optional-dependencies"]["dev"]
     for tool in ("pre-commit", "pre-commit-hooks", "ruff"):
         assert any(dependency.startswith(tool + "==") for dependency in dev)
+
+
+def test_line_length_is_checked_by_ruff():
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert config["tool"]["ruff"]["line-length"] == 100
+    assert "E501" in config["tool"]["ruff"]["lint"]["select"]

@@ -61,7 +61,11 @@ def schemas() -> list[dict[str, Any]]:
             "type": "function",
             "function": {
                 "name": "skill",
-                "description": "Load full instructions for a name in the available skill catalog. Resources are relative to the returned base_directory; no scripts are executed.",
+                "description": (
+                    "Load full instructions for a name in the available skill catalog. "
+                    "Resources are relative to the returned base_directory; "
+                    "no scripts are executed."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {"name": {"type": "string"}},

@@ -95,6 +95,10 @@ network access. Keep the environment active when committing.
 
 Checks include Ruff lint/format, whitespace/EOF, merge conflicts, large files,
 TOML/JSON/YAML syntax, and the complete offline pytest suite on every commit.
+Python uses 4-space indentation, default double quotes, sorted imports, and a
+100-character line width. Ruff E501 rejects overlong lines (with Ruff's built-in
+exceptions such as single unbreakable words and qualifying URL lines); formatting
+alone is not the line-length check. Split long strings manually when needed.
 Real model evaluation is excluded: no API key is needed. Hooks may fix files;
 review their changes, stage the intended files, and rerun until all checks pass.
 Then commit with `git commit -s`. Do not bypass checks with `--no-verify` or `SKIP`.
