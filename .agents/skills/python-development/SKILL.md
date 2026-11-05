@@ -6,7 +6,7 @@ description: Use when changing Python code, tests, or package dependencies in Or
 
 1. Read applicable workspace guidance and inspect existing callers before editing.
 2. Keep CLI, model requests, work loop, and permission enforcement separate. Keep the product single-agent.
-3. Use explicit types at public boundaries and validate untrusted inputs at runtime. Never use eval or shell=True.
+3. Use explicit types at public boundaries and validate untrusted inputs at runtime. Never use eval or shell=True. Avoid unexplained magic numbers: prefer descriptive named constants for limits, timeouts, and domain-specific values; document their meaning or rationale when not obvious. Keep self-explanatory literals inline rather than introducing unnecessary constants.
 4. Add deterministic regression tests for changed behavior. Use fake models and temporary workspaces; ordinary tests must not contact a model API.
 5. Run python -m pytest and report actual outcomes, including skipped platform cases. Do not claim untested support.
 6. Update documentation when observable behavior or dependencies change. Before committing or pushing, load the `pre-commit-checks` skill and follow its workflow. Do not commit or push without authorization.
