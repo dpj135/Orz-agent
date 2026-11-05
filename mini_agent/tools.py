@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
+from .skills import SkillCatalog
+
 
 @dataclass
 class Policy:
@@ -54,6 +56,7 @@ def _bounded(text: str, limit: int) -> dict[str, Any]:
 
 def schemas() -> list[dict[str, Any]]:
     return [
+        {"type": "function", "function": {"name": "skill", "description": "Load full instructions for a name in the available skill catalog. Resources are relative to the returned base_directory; no scripts are executed.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": False}}},
         {"type": "function", "function": {"name": "list_directory", "description": "List entries in a workspace directory.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}},
         {"type": "function", "function": {"name": "read_file", "description": "Read a UTF-8 text file in the workspace.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "max_bytes": {"type": "integer", "minimum": 1}}, "required": ["path"], "additionalProperties": False}}},
         {"type": "function", "function": {"name": "write_file", "description": "Write UTF-8 text in the workspace when permitted.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"], "additionalProperties": False}}},
@@ -61,8 +64,13 @@ def schemas() -> list[dict[str, Any]]:
     ]
 
 
-def execute(name: str, args: dict[str, Any], policy: Policy, confirm: Callable[[str], bool]) -> dict[str, Any]:
+def execute(name: str, args: dict[str, Any], policy: Policy, confirm: Callable[[str], bool], catalog: SkillCatalog | None = None) -> dict[str, Any]:
     try:
+        if name == "skill":
+            _strict_args(args, {"name"})
+            if catalog is None:
+                raise ValueError("skill catalog unavailable")
+            return catalog.load(args["name"])
         if name == "list_directory":
             _strict_args(args, {"path"})
             path = policy.path(args["path"])

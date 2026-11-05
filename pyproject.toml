@@ -3,7 +3,17 @@ name = "mini-agent"
 version = "0.1.0"
 description = "A small single-agent CLI with an OpenAI-compatible work loop"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["PyYAML>=6.0.2,<7"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["mini_agent*"]
 
 [project.scripts]
 agent = "mini_agent.cli:main"
