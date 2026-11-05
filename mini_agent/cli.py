@@ -12,7 +12,9 @@ from .tools import Policy
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="A small single-agent CLI")
     parser.add_argument("prompt", nargs="?", help="one-shot prompt; omit for REPL")
-    parser.add_argument("--base-url", default=os.getenv("AGENT_BASE_URL", "https://api.openai.com/v1"))
+    parser.add_argument(
+        "--base-url", default=os.getenv("AGENT_BASE_URL", "https://api.openai.com/v1")
+    )
     parser.add_argument("--model", default=os.getenv("AGENT_MODEL", "gpt-4o-mini"))
     parser.add_argument("--api-key", default=None, help="prefer AGENT_API_KEY environment variable")
     parser.add_argument("--workspace", type=Path, default=Path.cwd())
@@ -31,7 +33,9 @@ def main(argv: list[str] | None = None) -> int:
     workspace = args.workspace.expanduser().resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     client = ModelClient(key, args.base_url, args.model)
-    policy = Policy(workspace=workspace, allow_write=args.allow_write, allow_command=args.allow_command)
+    policy = Policy(
+        workspace=workspace, allow_write=args.allow_write, allow_command=args.allow_command
+    )
 
     def confirm(prompt: str) -> bool:
         try:

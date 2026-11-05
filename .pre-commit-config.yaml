@@ -1,0 +1,55 @@
+minimum_pre_commit_version: "4.3.0"
+# Local hooks use the active development environment; install .[dev] first.
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff lint
+        entry: python -m ruff check --fix
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: Ruff format
+        entry: python -m ruff format
+        language: system
+        types_or: [python, pyi]
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        entry: python -m pre_commit_hooks.trailing_whitespace_fixer
+        language: system
+        types: [text]
+      - id: end-of-file-fixer
+        name: Fix end of file
+        entry: python -m pre_commit_hooks.end_of_file_fixer
+        language: system
+        types: [text]
+      - id: check-merge-conflict
+        name: Check merge conflicts
+        entry: python -m pre_commit_hooks.check_merge_conflict
+        language: system
+        types: [text]
+      - id: check-added-large-files
+        name: Check large files
+        entry: python -m pre_commit_hooks.check_added_large_files --maxkb=500
+        language: system
+      - id: check-toml
+        name: Check TOML
+        entry: python -m pre_commit_hooks.check_toml
+        language: system
+        types: [toml]
+      - id: check-json
+        name: Check JSON
+        entry: python -m pre_commit_hooks.check_json
+        language: system
+        types: [json]
+      - id: check-yaml
+        name: Check YAML
+        entry: python -m pre_commit_hooks.check_yaml
+        language: system
+        types: [yaml]
+      - id: pytest
+        name: Offline regression tests
+        entry: python -m pytest -q
+        language: system
+        pass_filenames: false
+        always_run: true

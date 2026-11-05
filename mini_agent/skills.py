@@ -1,4 +1,5 @@
 """Bounded, workspace-local instruction and skill discovery."""
+
 from __future__ import annotations
 
 import os
@@ -53,7 +54,7 @@ def parse_skill(text: str) -> tuple[str, str, str]:
         raise ValueError("invalid skill name")
     if not isinstance(description, str) or not description.strip() or len(description) > 500:
         raise ValueError("invalid skill description")
-    body = "\n".join(lines[end + 1:]).strip()
+    body = "\n".join(lines[end + 1 :]).strip()
     if not body:
         raise ValueError("empty skill body")
     return name, " ".join(description.split()), body
@@ -120,9 +121,12 @@ class SkillCatalog:
         if self.instructions:
             sections.append("Workspace guidance from AGENTS.md:\n" + self.instructions)
         if self.entries:
-            sections.append("Available skills (summaries only):\n" + "\n".join(
-                f"- {name}: {entry.description}" for name, entry in sorted(self.entries.items())
-            ))
+            sections.append(
+                "Available skills (summaries only):\n"
+                + "\n".join(
+                    f"- {name}: {entry.description}" for name, entry in sorted(self.entries.items())
+                )
+            )
         return "\n\n".join(sections)
 
     def load(self, name: str) -> dict:
@@ -132,4 +136,9 @@ class SkillCatalog:
         actual_name, description, body = parse_skill(read_local(self.root, entry.path))
         if actual_name != name or description != entry.description:
             raise ValueError("skill metadata changed; start a new task to rescan")
-        return {"ok": True, "name": name, "base_directory": entry.path.parent.relative_to(self.root).as_posix(), "instructions": body}
+        return {
+            "ok": True,
+            "name": name,
+            "base_directory": entry.path.parent.relative_to(self.root).as_posix(),
+            "instructions": body,
+        }

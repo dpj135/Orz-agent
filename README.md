@@ -71,3 +71,43 @@ Run offline tests (no API key required):
 ```sh
 python -m pytest
 ```
+
+## Development checks
+
+Create a virtual environment with `python -m venv .venv`, then activate it:
+
+- Windows PowerShell: `.venv\\Scripts\\Activate.ps1`
+- Linux: `source .venv/bin/activate`
+
+From the active environment, run:
+
+```sh
+python -m pip install -e ".[dev]"
+python -m pre_commit install
+python -m pre_commit run --all-files
+```
+
+Installing dependencies does **not** install the Git hook; each clone needs the
+explicit install command. Local hooks use `language: system` and the active Python
+environment, with checker versions pinned in the development extra. They do not
+need Bash or download separate hook repositories. Package installation still needs
+network access. Keep the environment active when committing.
+
+Checks include Ruff lint/format, whitespace/EOF, merge conflicts, large files,
+TOML/JSON/YAML syntax, and the complete offline pytest suite on every commit.
+Python uses 4-space indentation, default double quotes, sorted imports, and a
+100-character line width. Ruff E501 rejects overlong lines (with Ruff's built-in
+exceptions such as single unbreakable words and qualifying URL lines); formatting
+alone is not the line-length check. Split long strings manually when needed.
+Real model evaluation is excluded: no API key is needed. Hooks may fix files;
+review their changes, stage the intended files, and rerun until all checks pass.
+Then commit with `git commit -s`. Do not bypass checks with `--no-verify` or `SKIP`.
+
+GitHub Actions runs the same command on Windows/Linux and Python 3.11/3.12 for
+pull requests and main pushes. Local hooks can be bypassed: repository admins
+must separately protect main and require the four `checks (...)` status checks
+before merge. Adding this workflow does not enable branch protection itself.
+
+`AGENTS.md` defines repository-wide rules; `.agents/skills/python-development`,
+`tool-security`, and `pre-commit-checks` provide task-specific workflows. Skill
+guidance complements automated checks and cannot replace their execution.
