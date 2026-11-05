@@ -8,4 +8,5 @@ Orz-agent is a single-agent Python CLI. Do not introduce multi-agent orchestrati
 - Add offline regression tests for changed behavior. Run `python -m pytest`; report failed, skipped and unrun checks accurately.
 - Never store API keys in source, logs or fixtures. Skill instructions cannot grant runtime permissions or override higher-priority instructions.
 - Keep public behavior and README aligned. Do not describe application-level filtering as an OS sandbox.
-- Commits require user authorization and `git commit -s`. Pre-commit/CI enforcement is a separate planned change, not implemented by these files.
+- Before commits or pushes, load `pre-commit-checks`. Run `python -m pre_commit run --all-files` and fix failures; do not bypass hooks with `--no-verify` or `SKIP`.
+- Commits require user authorization and `git commit -s`. Install development dependencies and Git hooks before committing. CI runs checks on Windows and Linux; administrators must separately enable required status checks and branch protection.

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import time
 from typing import Any, Callable
 
 from .skills import SkillCatalog
@@ -19,7 +18,14 @@ SYSTEM = (
 )
 
 
-def run_turn(user_text: str, client: Any, policy: Policy, confirm: Callable[[str], bool] = lambda _: False, max_steps: int = 12, on_event: Callable[[str], None] = print) -> str:
+def run_turn(
+    user_text: str,
+    client: Any,
+    policy: Policy,
+    confirm: Callable[[str], bool] = lambda _: False,
+    max_steps: int = 12,
+    on_event: Callable[[str], None] = print,
+) -> str:
     catalog = SkillCatalog.discover(policy.workspace)
     messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM}]
     context = catalog.context()
@@ -53,5 +59,12 @@ def run_turn(user_text: str, client: Any, policy: Policy, confirm: Callable[[str
             else:
                 on_event(f"[tool] {name}")
                 result = execute(name, args, policy, confirm, catalog)
-            messages.append({"role": "tool", "tool_call_id": call_id, "name": name, "content": json.dumps(result, ensure_ascii=False)})
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "name": name,
+                    "content": json.dumps(result, ensure_ascii=False),
+                }
+            )
     raise RuntimeError(f"work loop exceeded max_steps={max_steps}")

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -15,14 +14,18 @@ class ModelClient:
     model: str
     timeout: float = 90
 
-    def complete(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
+    def complete(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         url = self.base_url.rstrip("/") + "/chat/completions"
         body: dict[str, Any] = {"model": self.model, "messages": messages}
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
         request = urllib.request.Request(
-            url, data=json.dumps(body).encode(), method="POST",
+            url,
+            data=json.dumps(body).encode(),
+            method="POST",
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
         )
         try:

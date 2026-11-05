@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import subprocess
 from dataclasses import dataclass
@@ -41,7 +40,9 @@ class Policy:
         return candidate
 
 
-def _strict_args(args: dict[str, Any], required: set[str], optional: set[str] | None = None) -> None:
+def _strict_args(
+    args: dict[str, Any], required: set[str], optional: set[str] | None = None
+) -> None:
     optional = optional or set()
     if set(args) - required - optional or not required.issubset(args):
         raise ValueError("invalid tool arguments")
@@ -56,15 +57,87 @@ def _bounded(text: str, limit: int) -> dict[str, Any]:
 
 def schemas() -> list[dict[str, Any]]:
     return [
-        {"type": "function", "function": {"name": "skill", "description": "Load full instructions for a name in the available skill catalog. Resources are relative to the returned base_directory; no scripts are executed.", "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": False}}},
-        {"type": "function", "function": {"name": "list_directory", "description": "List entries in a workspace directory.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}}},
-        {"type": "function", "function": {"name": "read_file", "description": "Read a UTF-8 text file in the workspace.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "max_bytes": {"type": "integer", "minimum": 1}}, "required": ["path"], "additionalProperties": False}}},
-        {"type": "function", "function": {"name": "write_file", "description": "Write UTF-8 text in the workspace when permitted.", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"], "additionalProperties": False}}},
-        {"type": "function", "function": {"name": "run_command", "description": "Run an explicitly permitted executable without a shell.", "parameters": {"type": "object", "properties": {"program": {"type": "string"}, "args": {"type": "array", "items": {"type": "string"}}}, "required": ["program", "args"], "additionalProperties": False}}},
+        {
+            "type": "function",
+            "function": {
+                "name": "skill",
+                "description": "Load full instructions for a name in the available skill catalog. Resources are relative to the returned base_directory; no scripts are executed.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"name": {"type": "string"}},
+                    "required": ["name"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "list_directory",
+                "description": "List entries in a workspace directory.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "read_file",
+                "description": "Read a UTF-8 text file in the workspace.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "max_bytes": {"type": "integer", "minimum": 1},
+                    },
+                    "required": ["path"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "write_file",
+                "description": "Write UTF-8 text in the workspace when permitted.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
+                    "required": ["path", "content"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "run_command",
+                "description": "Run an explicitly permitted executable without a shell.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "program": {"type": "string"},
+                        "args": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": ["program", "args"],
+                    "additionalProperties": False,
+                },
+            },
+        },
     ]
 
 
-def execute(name: str, args: dict[str, Any], policy: Policy, confirm: Callable[[str], bool], catalog: SkillCatalog | None = None) -> dict[str, Any]:
+def execute(
+    name: str,
+    args: dict[str, Any],
+    policy: Policy,
+    confirm: Callable[[str], bool],
+    catalog: SkillCatalog | None = None,
+) -> dict[str, Any]:
     try:
         if name == "skill":
             _strict_args(args, {"name"})
@@ -74,30 +147,57 @@ def execute(name: str, args: dict[str, Any], policy: Policy, confirm: Callable[[
         if name == "list_directory":
             _strict_args(args, {"path"})
             path = policy.path(args["path"])
-            if not path.is_dir(): raise FileNotFoundError(args["path"])
+            if not path.is_dir():
+                raise FileNotFoundError(args["path"])
             entries = sorted(p.name for p in path.iterdir())[:200]
             return {"ok": True, "entries": entries}
         if name == "read_file":
             _strict_args(args, {"path"}, {"max_bytes"})
             path = policy.path(args["path"])
-            if not path.is_file(): raise FileNotFoundError(args["path"])
-            return {"ok": True, **_bounded(path.read_text(encoding="utf-8"), min(int(args.get("max_bytes", policy.max_bytes)), policy.max_bytes))}
+            if not path.is_file():
+                raise FileNotFoundError(args["path"])
+            return {
+                "ok": True,
+                **_bounded(
+                    path.read_text(encoding="utf-8"),
+                    min(int(args.get("max_bytes", policy.max_bytes)), policy.max_bytes),
+                ),
+            }
         if name == "write_file":
             _strict_args(args, {"path", "content"})
-            if not policy.allow_write or not confirm(f"write {args['path']}? [y/N] "): raise PermissionError("write denied")
+            if not policy.allow_write or not confirm(f"write {args['path']}? [y/N] "):
+                raise PermissionError("write denied")
             path = policy.path(args["path"])
             content = args["content"]
-            if len(content.encode()) > policy.max_bytes: raise ValueError("content exceeds limit")
+            if len(content.encode()) > policy.max_bytes:
+                raise ValueError("content exceeds limit")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
             return {"ok": True, "path": str(path)}
         if name == "run_command":
             _strict_args(args, {"program", "args"})
-            if not policy.allow_command or not confirm(f"run {args['program']}? [y/N] "): raise PermissionError("command denied")
-            if not isinstance(args["args"], list) or not all(isinstance(item, str) for item in args["args"]): raise ValueError("args must be a string array")
-            if os.path.basename(args["program"]) not in {"python", "python.exe", "git", "git.exe"}: raise PermissionError("program is not allowlisted")
-            result = subprocess.run([args["program"], *args["args"]], cwd=policy.workspace, shell=False, capture_output=True, text=True, timeout=30)
-            return {"ok": result.returncode == 0, "returncode": result.returncode, "stdout": _bounded(result.stdout, policy.max_bytes), "stderr": _bounded(result.stderr, policy.max_bytes)}
+            if not policy.allow_command or not confirm(f"run {args['program']}? [y/N] "):
+                raise PermissionError("command denied")
+            if not isinstance(args["args"], list) or not all(
+                isinstance(item, str) for item in args["args"]
+            ):
+                raise ValueError("args must be a string array")
+            if os.path.basename(args["program"]) not in {"python", "python.exe", "git", "git.exe"}:
+                raise PermissionError("program is not allowlisted")
+            result = subprocess.run(
+                [args["program"], *args["args"]],
+                cwd=policy.workspace,
+                shell=False,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            return {
+                "ok": result.returncode == 0,
+                "returncode": result.returncode,
+                "stdout": _bounded(result.stdout, policy.max_bytes),
+                "stderr": _bounded(result.stderr, policy.max_bytes),
+            }
         raise ValueError("unknown tool")
     except Exception as exc:
         return {"ok": False, "error": type(exc).__name__ + ": " + str(exc)}
