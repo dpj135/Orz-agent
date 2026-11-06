@@ -11,9 +11,12 @@ ALLOWED_PROGRAMS = frozenset({"python", "python.exe", "git", "git.exe"})
 
 
 class RunCommandTool(BaseTool):
+    """Run approved allowlisted programs without a shell; not an OS sandbox."""
+
     name = "run_command"
 
     def schema(self) -> dict[str, Any]:
+        """Describe the executable name and string argument array."""
         return {
             "type": "function",
             "function": {
@@ -32,6 +35,11 @@ class RunCommandTool(BaseTool):
         }
 
     def execute(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+        """Enforce opt-in and approval, then run with timeout and capped results.
+
+        Output is captured before truncation and the default environment is
+        inherited; this method does not provide process-tree isolation.
+        """
         if not context.policy.allow_command or not context.confirm(
             f"run {arguments['program']}? [y/N] "
         ):

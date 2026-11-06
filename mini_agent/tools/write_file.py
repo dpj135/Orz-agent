@@ -7,9 +7,12 @@ from .base import BaseTool
 
 
 class WriteFileTool(BaseTool):
+    """Create or overwrite workspace text only with permission and approval."""
+
     name = "write_file"
 
     def schema(self) -> dict[str, Any]:
+        """Describe the target path and replacement UTF-8 content."""
         return {
             "type": "function",
             "function": {
@@ -25,6 +28,7 @@ class WriteFileTool(BaseTool):
         }
 
     def execute(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+        """Require approval, check the path and byte budget, then write content."""
         if not context.policy.allow_write or not context.confirm(
             f"write {arguments['path']}? [y/N] "
         ):

@@ -12,13 +12,21 @@ class BaseTool(ABC):
 
     @property
     @abstractmethod
-    def name(self) -> str: ...
+    def name(self) -> str:
+        """Return the unique API-visible name used for registry dispatch."""
+        ...
 
     @abstractmethod
-    def schema(self) -> dict[str, Any]: ...
+    def schema(self) -> dict[str, Any]:
+        """Return one OpenAI tools entry describing this tool and its arguments."""
+        ...
 
     def validate(self, arguments: dict[str, Any]) -> dict[str, Any]:
-        """Validate the deliberately small schema vocabulary used by built-ins."""
+        """Check fields, supported types and minima, returning an independent copy.
+
+        This is not full JSON Schema validation or authorization. Execution must
+        still enforce the context policy; tools may override for extra constraints.
+        """
         if not isinstance(arguments, dict):
             raise ValueError("tool arguments must be an object")
         parameters = self.schema()["function"]["parameters"]
@@ -44,4 +52,10 @@ class BaseTool(ABC):
         return deepcopy(arguments)
 
     @abstractmethod
-    def execute(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]: ...
+    def execute(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+        """Apply policy/approval and execute validated arguments using task context.
+
+        Return a JSON-serializable result; the registry converts raised exceptions
+        into tool failures. Do not retain task state or invoke another tool.
+        """
+        ...

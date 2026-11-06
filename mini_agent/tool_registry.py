@@ -12,9 +12,13 @@ from .tools.base import BaseTool
 
 
 class ToolRegistry:
-    """Discover only the installed, trusted built-in package, never workspace code."""
+    """Own stateless tool instances, schema snapshots and validated dispatch.
+
+    Discovery is restricted to trusted built-ins, not arbitrary workspace plugins.
+    """
 
     def __init__(self, tools: Iterable[BaseTool]):
+        """Register tools in name order; reject duplicates and malformed API schemas."""
         self._tools: dict[str, BaseTool] = {}
         self._schemas: list[dict[str, Any]] = []
         for tool in sorted(tools, key=lambda item: item.name):
@@ -42,6 +46,11 @@ class ToolRegistry:
 
     @classmethod
     def discover(cls) -> ToolRegistry:
+        """Import built-in modules and instantiate one locally defined tool each.
+
+        Imported/abstract classes are excluded. Import and registration failures
+        abort discovery; importing trusted code can still execute top-level code.
+        """
         from . import tools
 
         instances = []
@@ -62,9 +71,14 @@ class ToolRegistry:
         return cls(instances)
 
     def schemas(self) -> list[dict[str, Any]]:
+        """Return API definitions without exposing the registry's mutable snapshots."""
         return deepcopy(self._schemas)
 
     def execute(self, name: str, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+        """Validate and dispatch by name, converting ordinary failures to tool results.
+
+        Concrete tools enforce permissions; KeyboardInterrupt/SystemExit propagate.
+        """
         try:
             if not isinstance(name, str) or name not in self._tools:
                 raise ValueError("unknown tool")

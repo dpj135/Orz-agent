@@ -7,9 +7,12 @@ from .base import BaseTool
 
 
 class ReadFileTool(BaseTool):
+    """Read workspace UTF-8 files with a policy-capped response."""
+
     name = "read_file"
 
     def schema(self) -> dict[str, Any]:
+        """Describe the path and optional positive byte limit."""
         return {
             "type": "function",
             "function": {
@@ -28,6 +31,7 @@ class ReadFileTool(BaseTool):
         }
 
     def execute(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+        """Check the workspace path, read text, and truncate the returned bytes."""
         path = context.policy.path(arguments["path"])
         if not path.is_file():
             raise FileNotFoundError(arguments["path"])

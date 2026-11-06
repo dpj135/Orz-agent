@@ -7,9 +7,12 @@ from .base import BaseTool
 
 
 class SkillTool(BaseTool):
+    """Load registered skill instructions using the current task catalog."""
+
     name = "skill"
 
     def schema(self) -> dict[str, Any]:
+        """Describe the registered skill name required for on-demand loading."""
         return {
             "type": "function",
             "function": {
@@ -29,6 +32,7 @@ class SkillTool(BaseTool):
         }
 
     def execute(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+        """Load instructions from the task catalog without executing any scripts."""
         if context.catalog is None:
             raise ValueError("skill catalog unavailable")
         return context.catalog.load(arguments["name"])
