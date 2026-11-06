@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..tool_context import ToolContext, bounded
+from ..tool_context import ToolExecutionContext, bounded
 from .base import BaseTool
 
 
@@ -12,7 +12,14 @@ class ReadFileTool(BaseTool):
     name = "read_file"
 
     def schema(self) -> dict[str, Any]:
-        """Describe the path and optional positive byte limit."""
+        """Describe the path and optional positive byte limit.
+
+        Args:
+            None.
+
+        Returns:
+            One OpenAI-compatible function tool definition.
+        """
         return {
             "type": "function",
             "function": {
@@ -30,8 +37,16 @@ class ReadFileTool(BaseTool):
             },
         }
 
-    def execute(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
-        """Check the workspace path, read text, and truncate the returned bytes."""
+    def execute(self, arguments: dict[str, Any], context: ToolExecutionContext) -> dict[str, Any]:
+        """Check the workspace path, read text, and truncate the returned bytes.
+
+        Args:
+            arguments: Tool argument mapping; validated before execution.
+            context: Task policy, approval callback and optional skill catalog.
+
+        Returns:
+            JSON-serializable tool result; registry wrappers convert errors.
+        """
         path = context.policy.path(arguments["path"])
         if not path.is_file():
             raise FileNotFoundError(arguments["path"])

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..tool_context import ToolContext
+from ..tool_context import ToolExecutionContext
 from .base import BaseTool
 
 
@@ -12,7 +12,14 @@ class WriteFileTool(BaseTool):
     name = "write_file"
 
     def schema(self) -> dict[str, Any]:
-        """Describe the target path and replacement UTF-8 content."""
+        """Describe the target path and replacement UTF-8 content.
+
+        Args:
+            None.
+
+        Returns:
+            One OpenAI-compatible function tool definition.
+        """
         return {
             "type": "function",
             "function": {
@@ -27,8 +34,16 @@ class WriteFileTool(BaseTool):
             },
         }
 
-    def execute(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
-        """Require approval, check the path and byte budget, then write content."""
+    def execute(self, arguments: dict[str, Any], context: ToolExecutionContext) -> dict[str, Any]:
+        """Require approval, check the path and byte budget, then write content.
+
+        Args:
+            arguments: Tool argument mapping; validated before execution.
+            context: Task policy, approval callback and optional skill catalog.
+
+        Returns:
+            JSON-serializable tool result; registry wrappers convert errors.
+        """
         if not context.policy.allow_write or not context.confirm(
             f"write {arguments['path']}? [y/N] "
         ):

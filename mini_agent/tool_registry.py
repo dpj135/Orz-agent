@@ -7,7 +7,7 @@ import re
 from copy import deepcopy
 from typing import Any, Iterable
 
-from .tool_context import ToolContext
+from .tool_context import ToolExecutionContext
 from .tools.base import BaseTool
 
 
@@ -18,7 +18,14 @@ class ToolRegistry:
     """
 
     def __init__(self, tools: Iterable[BaseTool]):
-        """Register tools in name order; reject duplicates and malformed API schemas."""
+        """Register tools in name order; reject duplicates and malformed API schemas.
+
+        Args:
+            tools: Tool instances to register, with unique names and matching schemas.
+
+        Returns:
+            None. Initializes retained tool instances and schema snapshots.
+        """
         self._tools: dict[str, BaseTool] = {}
         self._schemas: list[dict[str, Any]] = []
         for tool in sorted(tools, key=lambda item: item.name):
@@ -50,6 +57,12 @@ class ToolRegistry:
 
         Imported/abstract classes are excluded. Import and registration failures
         abort discovery; importing trusted code can still execute top-level code.
+
+        Args:
+            None.
+
+        Returns:
+            Registry containing discovered, validated built-in tool instances.
         """
         from . import tools
 
@@ -71,13 +84,30 @@ class ToolRegistry:
         return cls(instances)
 
     def schemas(self) -> list[dict[str, Any]]:
-        """Return API definitions without exposing the registry's mutable snapshots."""
+        """Return API definitions without exposing the registry's mutable snapshots.
+
+        Args:
+            None.
+
+        Returns:
+            Independent list of OpenAI-compatible tool definitions.
+        """
         return deepcopy(self._schemas)
 
-    def execute(self, name: str, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    def execute(
+        self, name: str, arguments: dict[str, Any], context: ToolExecutionContext
+    ) -> dict[str, Any]:
         """Validate and dispatch by name, converting ordinary failures to tool results.
 
         Concrete tools enforce permissions; KeyboardInterrupt/SystemExit propagate.
+
+        Args:
+            name: Unique registered tool name requested by the model.
+            arguments: Tool argument mapping; validated before execution.
+            context: Task policy, approval callback and optional skill catalog.
+
+        Returns:
+            JSON-serializable tool result; registry wrappers convert errors.
         """
         try:
             if not isinstance(name, str) or name not in self._tools:

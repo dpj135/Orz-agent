@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from mini_agent.tool_context import Policy, ToolContext
+from mini_agent.tool_context import Policy, ToolExecutionContext
 from mini_agent.tool_registry import ToolRegistry
 from mini_agent.tools.base import BaseTool
 from mini_agent.tools.read_file import ReadFileTool
 
 
 def context(root, **kwargs):
-    return ToolContext(Policy(root, **kwargs), lambda _: True)
+    return ToolExecutionContext(Policy(root, **kwargs), lambda _: True)
 
 
 def test_discovery_and_schema_copy():

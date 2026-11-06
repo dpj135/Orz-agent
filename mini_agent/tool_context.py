@@ -25,6 +25,12 @@ class Policy:
 
         Application checks are not race-free isolation and do not comprehensively
         detect every platform-specific reparse point.
+
+        Args:
+            value: Absolute or workspace-relative path requested by the tool.
+
+        Returns:
+            Resolved absolute path within the configured workspace.
         """
         raw = Path(value)
         candidate_raw = raw if raw.is_absolute() else self.workspace / raw
@@ -45,10 +51,17 @@ class Policy:
 
 
 @dataclass(frozen=True)
-class ToolContext:
-    """Per-task dependencies injected into tools instead of held on tool instances.
+class ToolExecutionContext:
+    """Provide the user-configured task environment and execution dependencies.
 
-    Frozen fields do not make the referenced policy or skill catalog immutable.
+    Attributes:
+        policy: User-configured workspace and capabilities used for safety checks.
+        confirm: Callback requesting user approval for gated operations.
+        catalog: Skills available to this task, or None when unavailable.
+
+    This container does not validate arguments or authorize operations itself.
+    BaseTool.validate handles argument structure/types; policy and concrete tools
+    enforce execution permissions. Frozen fields do not freeze referenced objects.
     """
 
     policy: Policy
@@ -57,7 +70,15 @@ class ToolContext:
 
 
 def bounded(text: str, limit: int) -> dict[str, Any]:
-    """Cap returned UTF-8 bytes and mark truncation; input is already in memory."""
+    """Cap returned UTF-8 bytes and mark truncation; input is already in memory.
+
+    Args:
+        text: Already captured text to limit for the returned result.
+        limit: Maximum UTF-8 byte count retained in the response.
+
+    Returns:
+        Text and a flag indicating whether UTF-8 output was truncated.
+    """
     raw = text.encode("utf-8", "replace")
     if len(raw) <= limit:
         return {"text": text, "truncated": False}

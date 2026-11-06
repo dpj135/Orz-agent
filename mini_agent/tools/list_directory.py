@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..tool_context import DIRECTORY_ENTRY_LIMIT, ToolContext
+from ..tool_context import DIRECTORY_ENTRY_LIMIT, ToolExecutionContext
 from .base import BaseTool
 
 
@@ -12,7 +12,14 @@ class ListDirectoryTool(BaseTool):
     name = "list_directory"
 
     def schema(self) -> dict[str, Any]:
-        """Describe the workspace directory path argument."""
+        """Describe the workspace directory path argument.
+
+        Args:
+            None.
+
+        Returns:
+            One OpenAI-compatible function tool definition.
+        """
         return {
             "type": "function",
             "function": {
@@ -27,8 +34,16 @@ class ListDirectoryTool(BaseTool):
             },
         }
 
-    def execute(self, arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
-        """Check the directory path and return sorted names up to the entry cap."""
+    def execute(self, arguments: dict[str, Any], context: ToolExecutionContext) -> dict[str, Any]:
+        """Check the directory path and return sorted names up to the entry cap.
+
+        Args:
+            arguments: Tool argument mapping; validated before execution.
+            context: Task policy, approval callback and optional skill catalog.
+
+        Returns:
+            JSON-serializable tool result; registry wrappers convert errors.
+        """
         path = context.policy.path(arguments["path"])
         if not path.is_dir():
             raise FileNotFoundError(arguments["path"])
