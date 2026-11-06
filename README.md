@@ -72,6 +72,34 @@ Run offline tests (no API key required):
 python -m pytest
 ```
 
+## Tool architecture
+
+Built-in tools live in `mini_agent/tools/`, one concrete `BaseTool` subclass per
+module. Implement `name`, `schema()` (one OpenAI tool definition), and `execute()`;
+`validate()` provides shared field/type/minimum checks for the built-in schema
+subset and can be overridden for tool-specific requirements. It is not a general
+JSON Schema engine.
+
+`ToolRegistry.discover()` imports only the installed built-in tools package in
+sorted order, rejects duplicate names/schema mismatches, and retains tool instances.
+The work loop creates one registry per task and uses it for schemas and dispatch.
+It never scans the user's workspace for Python plugins. Importing trusted built-in
+modules executes their top-level code: discovery is not a security sandbox.
+
+Concrete tools must not import or invoke each other or retain task state. They
+share `BaseTool`, `ToolContext`, and public capabilities in `tool_context.py`
+(policy, path checks, approval, limits, output helpers). Add a new tool module and
+tests without modifying the work loop or a central dispatch branch. Automatic
+discovery does not grant write/process permissions. The original `tools.schemas`
+and `tools.execute` helpers remain compatibility wrappers; new code should use
+`ToolRegistry` directly.
+
+This refactor retains existing file/process behavior and its limitations. It adds
+runtime checks for declared argument types and positive byte limits; numeric
+strings and booleans are not accepted as integer limits. It does not introduce
+OS isolation, bounded-memory reads, subprocess environment sanitization, or
+process-tree cancellation.
+
 ## Development checks
 
 Create a virtual environment with `python -m venv .venv`, then activate it:

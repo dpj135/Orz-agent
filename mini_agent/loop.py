@@ -4,7 +4,8 @@ import json
 from typing import Any, Callable
 
 from .skills import SkillCatalog
-from .tools import Policy, execute, schemas
+from .tool_context import Policy, ToolContext
+from .tool_registry import ToolRegistry
 
 SYSTEM = (
     "You are a careful command-line assistant. Use tools only when useful. Stay within "
@@ -27,6 +28,8 @@ def run_turn(
     on_event: Callable[[str], None] = print,
 ) -> str:
     catalog = SkillCatalog.discover(policy.workspace)
+    registry = ToolRegistry.discover()
+    tool_context = ToolContext(policy, confirm, catalog)
     messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM}]
     context = catalog.context()
     if context:
@@ -35,7 +38,7 @@ def run_turn(
     for warning in catalog.warnings:
         on_event(f"[skills warning] {warning}")
     for step in range(max_steps):
-        response = client.complete(messages, schemas())
+        response = client.complete(messages, registry.schemas())
         choices = response.get("choices") or []
         if not choices or "message" not in choices[0]:
             raise RuntimeError("model response has no choices[0].message")
@@ -58,7 +61,7 @@ def run_turn(
                 result = {"ok": False, "error": f"invalid tool arguments: {exc}"}
             else:
                 on_event(f"[tool] {name}")
-                result = execute(name, args, policy, confirm, catalog)
+                result = registry.execute(name, args, tool_context)
             messages.append(
                 {
                     "role": "tool",
