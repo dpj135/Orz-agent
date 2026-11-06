@@ -17,10 +17,20 @@ def context(root, **kwargs):
 def test_discovery_and_schema_copy():
     registry = ToolRegistry.discover()
     names = [schema["function"]["name"] for schema in registry.schemas()]
-    assert names == ["list_directory", "read_file", "run_command", "skill", "write_file"]
+    assert names == [
+        "edit_file",
+        "glob_files",
+        "list_directory",
+        "read_file",
+        "run_command",
+        "run_pytest",
+        "search_text",
+        "skill",
+        "write_file",
+    ]
     schemas = registry.schemas()
     schemas[0]["function"]["name"] = "changed"
-    assert registry.schemas()[0]["function"]["name"] == "list_directory"
+    assert registry.schemas()[0]["function"]["name"] == "edit_file"
 
 
 def test_duplicate_name_rejected():
@@ -106,7 +116,7 @@ def test_process_permission_and_invocation(tmp_path, monkeypatch):
 def test_workspace_python_is_never_imported(tmp_path, monkeypatch):
     (tmp_path / "read_file.py").write_text("raise RuntimeError('untrusted')")
     monkeypatch.chdir(tmp_path)
-    assert len(ToolRegistry.discover().schemas()) == 5
+    assert len(ToolRegistry.discover().schemas()) == 9
 
 
 def test_concrete_tools_do_not_import_each_other():
