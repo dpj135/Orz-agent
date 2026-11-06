@@ -19,6 +19,7 @@ class Policy:
     allow_write: bool = False
     allow_command: bool = False
     max_bytes: int = DEFAULT_MAX_BYTES
+    allow_web_search: bool = False
 
     def path(self, value: str) -> Path:
         """Resolve a workspace path, rejecting detected symlinks and escapes.

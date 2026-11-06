@@ -25,6 +25,42 @@ The default tools are `list_directory` and `read_file`. Writing requires `--allo
 
 This is an MVP, not a strong OS sandbox. Keep the workspace and API endpoint trusted, and do not use it to execute untrusted code.
 
+## Web search
+
+`web_search` uses Tavily's dedicated HTTPS Search API (a separate service from the
+chat model). Create a Tavily API key; it may incur provider charges. No additional
+Python dependency is required: the adapter uses standard-library `urllib`.
+
+```powershell
+$env:TAVILY_API_KEY = "your-search-key"
+python -m mini_agent "Find the current Python release notes" --allow-web-search
+```
+
+Arguments: `{"query":"Python release notes","max_results":5}`. Queries must be
+nonempty and at most 1,000 characters; results default to 5 and are capped at 10.
+The tool returns provider, title, URL and snippet, with deduplication and a
+`truncated` flag. It does not fetch result pages or generate a separate answer.
+No publication date is invented when the provider has not supplied one.
+
+Search is disabled unless `--allow-web-search` is supplied, and every call still
+requires interactive approval showing the query and provider. Only that query,
+retrieval flags and result count are sent, not the conversation or workspace.
+Queries themselves may contain confidential information: review before approval.
+The model cannot supply credentials, endpoint, headers or arbitrary API options.
+Credentials are read from the environment, excluded from object repr, and sent
+only to the fixed `https://api.tavily.com/search` endpoint. HTTP redirects are
+rejected; there is no automatic retry or fallback provider. Environment proxy
+settings are honored, so keep proxy configuration trusted.
+
+HTTP reads are capped at 512 KiB before JSON parsing; socket timeout is 20 seconds
+(not a strict total wall-clock deadline). Titles/snippets are capped at 300/2,000
+UTF-8 bytes and the result array uses the policy byte budget. HTTP errors and
+transport failures return sanitized messages without response bodies or credentials.
+The work loop remains bounded by model steps, not a separate search/spend quota.
+Returned text is untrusted external data, never an instruction; cite actual result
+URLs when using it. Search snippets are not equivalent to reading the full page.
+API tests are offline mocks; real provider availability/billing needs a manual test.
+
 ## Current scope
 
 - One agent and one serial work loop.

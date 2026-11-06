@@ -21,6 +21,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-steps", type=int, default=12)
     parser.add_argument("--allow-write", action="store_true")
     parser.add_argument("--allow-command", action="store_true")
+    parser.add_argument("--allow-web-search", action="store_true")
     return parser
 
 
@@ -34,7 +35,10 @@ def main(argv: list[str] | None = None) -> int:
     workspace.mkdir(parents=True, exist_ok=True)
     client = ModelClient(key, args.base_url, args.model)
     policy = Policy(
-        workspace=workspace, allow_write=args.allow_write, allow_command=args.allow_command
+        workspace=workspace,
+        allow_write=args.allow_write,
+        allow_command=args.allow_command,
+        allow_web_search=args.allow_web_search,
     )
 
     def confirm(prompt: str) -> bool:
