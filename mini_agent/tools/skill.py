@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..tool_context import ToolExecutionContext
+from ..tool_execution_context import ToolExecutionContext
 from .base import BaseTool
 
 

@@ -4,7 +4,7 @@ import json
 from typing import Any, Callable
 
 from .skills import SkillCatalog
-from .tool_context import Policy, ToolExecutionContext
+from .tool_execution_context import Policy, ToolExecutionContext
 from .tool_registry import ToolRegistry
 
 SYSTEM = (
@@ -29,7 +29,7 @@ def run_turn(
 ) -> str:
     catalog = SkillCatalog.discover(policy.workspace)
     registry = ToolRegistry.discover()
-    tool_context = ToolExecutionContext(policy, confirm, catalog)
+    tool_execution_context = ToolExecutionContext(policy, confirm, catalog)
     messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM}]
     context = catalog.context()
     if context:
@@ -61,7 +61,7 @@ def run_turn(
                 result = {"ok": False, "error": f"invalid tool arguments: {exc}"}
             else:
                 on_event(f"[tool] {name}")
-                result = registry.execute(name, args, tool_context)
+                result = registry.execute(name, args, tool_execution_context)
             messages.append(
                 {
                     "role": "tool",

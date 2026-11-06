@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, Callable
 
 from ..skills import SkillCatalog
-from ..tool_context import Policy, ToolExecutionContext
+from ..tool_execution_context import Policy, ToolExecutionContext
 
 __all__ = ["Policy", "execute", "schemas"]
 

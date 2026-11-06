@@ -4,7 +4,7 @@ import os
 import subprocess
 from typing import Any
 
-from ..tool_context import PROCESS_TIMEOUT_SECONDS, ToolExecutionContext, bounded
+from ..tool_execution_context import PROCESS_TIMEOUT_SECONDS, ToolExecutionContext, bounded
 from .base import BaseTool
 
 ALLOWED_PROGRAMS = frozenset({"python", "python.exe", "git", "git.exe"})

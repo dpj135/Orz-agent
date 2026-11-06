@@ -87,7 +87,7 @@ It never scans the user's workspace for Python plugins. Importing trusted built-
 modules executes their top-level code: discovery is not a security sandbox.
 
 Concrete tools must not import or invoke each other or retain task state. They
-share `BaseTool`, `ToolExecutionContext`, and public capabilities in `tool_context.py`
+share `BaseTool`, `ToolExecutionContext`, and public capabilities in `tool_execution_context.py`
 (policy, path checks, approval, limits, output helpers). Add a new tool module and
 tests without modifying the work loop or a central dispatch branch. Automatic
 discovery does not grant write/process permissions. The original `tools.schemas`

@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from copy import deepcopy
 from typing import Any
 
-from ..tool_context import ToolExecutionContext
+from ..tool_execution_context import ToolExecutionContext
 
 
 class BaseTool(ABC):

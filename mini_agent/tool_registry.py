@@ -7,7 +7,7 @@ import re
 from copy import deepcopy
 from typing import Any, Iterable
 
-from .tool_context import ToolExecutionContext
+from .tool_execution_context import ToolExecutionContext
 from .tools.base import BaseTool
 
 

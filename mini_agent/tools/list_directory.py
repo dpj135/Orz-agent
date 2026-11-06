@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..tool_context import DIRECTORY_ENTRY_LIMIT, ToolExecutionContext
+from ..tool_execution_context import DIRECTORY_ENTRY_LIMIT, ToolExecutionContext
 from .base import BaseTool
 
 
