@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from pathlib import PurePath
 from typing import Any
 
 from .. import file_search
+from ..text_safety import json_size, replace_unpaired_surrogates
 from ..tool_execution_context import ToolExecutionContext
 from .base import BaseTool
 
@@ -69,8 +69,8 @@ class GlobFilesTool(BaseTool):
         for path in traversal.files():
             if not path.relative_to(directory).match(pattern):
                 continue
-            relative = path.relative_to(workspace).as_posix()
-            size = len(json.dumps(relative, ensure_ascii=False).encode("utf-8")) + 2
+            relative, _ = replace_unpaired_surrogates(path.relative_to(workspace).as_posix())
+            size = json_size(relative) + 2
             if len(paths) >= limit or used + size > budget:
                 truncated = True
                 break
