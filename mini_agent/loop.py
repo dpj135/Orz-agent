@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any, Callable
 
+from .session import Session
 from .skills import SkillCatalog
 from .text_safety import sanitize_user_input
 from .tool_execution_context import Policy, ToolExecutionContext
@@ -20,6 +22,15 @@ SYSTEM = (
 )
 
 
+def initial_messages(policy: Policy) -> list[dict[str, Any]]:
+    """Construct the initial context once, never again during session resume."""
+    messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM}]
+    context = SkillCatalog.discover(policy.workspace).context()
+    if context:
+        messages.append({"role": "user", "content": context})
+    return messages
+
+
 def run_turn(
     user_text: str,
     client: Any,
@@ -27,48 +38,91 @@ def run_turn(
     confirm: Callable[[str], bool] = lambda _: False,
     max_steps: int = 12,
     on_event: Callable[[str], None] = print,
+    *,
+    session: Session | None = None,
 ) -> str:
     catalog = SkillCatalog.discover(policy.workspace)
     registry = ToolRegistry.discover()
     tool_execution_context = ToolExecutionContext(policy, confirm, catalog)
-    messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM}]
-    context = catalog.context()
-    if context:
-        messages.append({"role": "user", "content": context})
-    messages.append({"role": "user", "content": sanitize_user_input(user_text)})
-    for warning in catalog.warnings:
-        on_event(f"[skills warning] {warning}")
-    for step in range(max_steps):
-        response = client.complete(messages, registry.schemas())
-        choices = response.get("choices") or []
-        if not choices or "message" not in choices[0]:
-            raise RuntimeError("model response has no choices[0].message")
-        message = choices[0]["message"]
-        messages.append(message)
-        calls = message.get("tool_calls") or []
-        if not calls:
-            answer = message.get("content") or ""
-            on_event(answer)
-            return answer
-        for call in calls:
-            call_id = call.get("id", f"step-{step}")
-            function = call.get("function") or {}
-            name = function.get("name", "")
-            try:
-                args = json.loads(function.get("arguments", "{}"))
-                if not isinstance(args, dict):
-                    raise ValueError("tool arguments must be an object")
-            except (json.JSONDecodeError, ValueError) as exc:
-                result = {"ok": False, "error": f"invalid tool arguments: {exc}"}
-            else:
-                on_event(f"[tool] {name}")
-                result = registry.execute(name, args, tool_execution_context)
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "name": name,
-                    "content": json.dumps(result, ensure_ascii=False),
-                }
+    # Work on a copy: failed/cancelled turns never become the next model input.
+    messages = copy.deepcopy(session.messages) if session else initial_messages(policy)
+
+    def record(event: str, **data: Any) -> None:
+        if session:
+            session.record(event, **data)
+
+    try:
+        record("user_input", text=user_text)
+        messages.append({"role": "user", "content": sanitize_user_input(user_text)})
+        for warning in catalog.warnings:
+            on_event(f"[skills warning] {warning}")
+        for step in range(max_steps):
+            response = client.complete(messages, registry.schemas())
+            record("llm_response", response=response)
+            choices = response.get("choices") or []
+            if not choices or "message" not in choices[0]:
+                raise RuntimeError("model response has no choices[0].message")
+            message = choices[0]["message"]
+            messages.append(message)
+            calls = message.get("tool_calls") or []
+            if not calls:
+                answer = message.get("content") or ""
+                on_event(answer)
+                record("turn_end", status="completed")
+                if session:
+                    session.commit_messages(messages)
+                return answer
+            for call in calls:
+                call_id = call.get("id", f"step-{step}")
+                function = call.get("function") or {}
+                name = function.get("name", "")
+                raw_arguments = function.get("arguments", "{}")
+                try:
+                    args = json.loads(raw_arguments)
+                    if not isinstance(args, dict):
+                        raise ValueError("tool arguments must be an object")
+                except (json.JSONDecodeError, ValueError, TypeError) as exc:
+                    result = {"ok": False, "error": f"invalid tool arguments: {exc}"}
+                    record(
+                        "tool_rejected",
+                        call_id=call_id,
+                        name=name,
+                        arguments=raw_arguments,
+                        result=result,
+                    )
+                else:
+                    on_event(f"[tool] {name}")
+                    record("tool_start", call_id=call_id, name=name, arguments=args)
+                    try:
+                        result = registry.execute(name, args, tool_execution_context)
+                    except BaseException as exc:
+                        record(
+                            "tool_error",
+                            call_id=call_id,
+                            name=name,
+                            error_type=type(exc).__name__,
+                            error=str(exc),
+                        )
+                        raise
+                    record("tool_end", call_id=call_id, name=name, result=result)
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "name": name,
+                        "content": json.dumps(result, ensure_ascii=False),
+                    }
+                )
+        raise RuntimeError(f"work loop exceeded max_steps={max_steps}")
+    except BaseException as exc:
+        try:
+            record(
+                "turn_end",
+                status="interrupted" if isinstance(exc, KeyboardInterrupt) else "failed",
+                error_type=type(exc).__name__,
+                error=str(exc),
             )
-    raise RuntimeError(f"work loop exceeded max_steps={max_steps}")
+        except Exception:
+            # A broken log must not hide the original failure or run more tools.
+            pass
+        raise

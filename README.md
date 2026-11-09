@@ -25,6 +25,78 @@ The default tools are `list_directory` and `read_file`. Writing requires `--allo
 
 This is an MVP, not a strong OS sandbox. Keep the workspace and API endpoint trusted, and do not use it to execute untrusted code.
 
+## Sessions and local history
+
+```sh
+# New random UUID; or create an explicitly named, unused session
+agent --session-id my-task "Inspect the project"
+# Resume the saved messages and workspace; missing IDs are errors
+agent --resume my-task "Continue"
+# Explicit compatibility option for an endpoint rejecting prompt_cache_key
+agent --resume my-task --no-prompt-cache "Continue"
+# Store sessions in a chosen root (use the same root when resuming)
+agent --session-dir ./local-sessions --session-id example "Hello"
+```
+
+Without identity flags, every invocation creates a new UUID session. REPL turns
+share the same session. `--session-id` and `--resume` are mutually exclusive;
+creating an existing ID never overwrites or resumes it. An initial storage failure
+may leave a reserved but invalid session directory; it is not silently reused.
+Inspect/remove such incomplete data manually only when no writer is running.
+IDs must match
+`[A-Za-z0-9_-]{1,64}` (ASCII). There is no `AGENT_SESSION_ID` override. The
+64-character limit also bounds the cache key; IDs are never silently truncated.
+
+Default roots are `%LOCALAPPDATA%/orz-agent/sessions` on Windows,
+`${XDG_DATA_HOME:-~/.local/share}/orz-agent/sessions` on Linux, and
+`~/Library/Application Support/orz-agent/sessions` on macOS. Each ID maps to a
+SHA-256 hex digest directory derived from the ASCII ID, avoiding path traversal,
+platform filename collisions and unnecessarily long filenames.
+Each session contains a checkpoint, an independent append-only JSONL history,
+and a writer lock. A second writer is rejected; OS locks release on process exit.
+Do not delete/replace lock files while sessions are running. Use local filesystems
+with reliable file locking and atomic replacement semantics.
+
+The checkpoint stores only format version, session ID, messages, workspace and
+creation/update times. Checkpoints are capped at 32 MiB; exceeding the limit fails
+explicitly without truncation. New identity and initial context are saved before the first
+request; complete turns atomically replace the checkpoint. Failed/interrupted turns
+do not replace the last successful context. Resume loads those messages without
+reinjecting current workspace instructions. It uses the saved workspace (which must
+still exist), and rejects a conflicting explicit `--workspace`. Current model,
+credentials, tool implementations and permissions are used, not historical runtime
+snapshots. Keep the current configuration compatible with the saved conversation.
+Skill bodies are still loaded on demand from the current workspace.
+
+History records user inputs, parsed LLM responses, tool starts/results/errors and
+turn outcomes as events occur. It is independent of messages: it is not replayed,
+not used to repair context, and will not be erased by future context compression.
+There is no checkpoint-to-log event sequence binding. A crash can leave an
+unfinished event or a partial final log line; logging is not a transaction or an
+exactly-once execution guarantee. A successful tool can have changed files even
+when its turn was never checkpointed. Resume neither rolls back such effects nor
+automatically reruns tools. Corrupt/unsupported checkpoints and unmatched tool
+calls are rejected rather than guessed or repaired. Logs/trace UI, compression
+and full audit facilities are separate future work.
+
+Session IDs are also cache keys (`prompt_cache_key`) in this Chat Completions
+adapter, enabled by default for the OpenAI protocol. They remain stable across turns,
+tool loops and restarts. Custom gateway support has **not** been verified; use
+`--no-prompt-cache` for incompatible endpoints. A rejection fails once with actionable
+guidance: no silent field removal/retry or endpoint switch. The key is a routing
+hint, not server-side history or context isolation. Full required messages are
+still sent every time. Stable prefixes can help caching but do not guarantee a hit
+or reduced cost. Explicit IDs are sent to the target API: never use paths, usernames,
+keys or other sensitive information as IDs.
+
+Authentication configuration/headers and environment snapshots are not written to
+sessions. User input, model output and tool results can themselves contain secrets
+or code; treat both checkpoint and history as sensitive local files. No extra log
+upload is performed. Subsequent model requests still send the required context to
+the configured endpoint. Restrict access to the storage root using OS permissions;
+POSIX files/directories are created private, while Windows inherits user-directory
+ACLs. Application-level path checks are not race-free OS isolation.
+
 ## Current scope
 
 - One agent and one serial work loop.
@@ -43,7 +115,7 @@ assistant replies are trusted and passed through unchanged.
 
 ## Workspace instructions and skills
 
-At the start of **each task**, Python reads the workspace root `AGENTS.md` and
+At the start of **each new session**, Python reads the workspace root `AGENTS.md` and
 scans `.agents/skills/*/SKILL.md`. It adds workspace guidance and a sorted catalog
 of skill names/descriptions to user-role context before the actual user request.
 Repository content is not promoted into the system prompt.
