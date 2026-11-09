@@ -21,6 +21,9 @@ One-shot mode:
 python -m mini_agent "Read README.md and summarize it"
 ```
 
+One-shot commands exit with code 0 on success, 1 on runtime/model errors
+(including the step limit), and 2 when the API key is missing.
+
 The default tools are `list_directory` and `read_file`. Writing requires `--allow-write` and interactive confirmation. Process execution requires `--allow-command`, interactive confirmation, and an allowlisted executable (`python` or `git`); it never uses a shell.
 
 This is an MVP, not a strong OS sandbox. Keep the workspace and API endpoint trusted, and do not use it to execute untrusted code.
@@ -80,6 +83,21 @@ Run offline tests (no API key required):
 ```sh
 python -m pytest
 ```
+
+Process-level E2E tests are intentionally kept outside `tests/` so local
+pre-commit checks remain fast and offline. They start a local-only mock
+OpenAI-compatible server and a real `mini_agent` subprocess; no real model or
+API key is used. The replay responses are synthetic, hand-authored protocol
+fixtures (not recordings from a provider):
+
+```sh
+python -m pytest e2e -q
+```
+
+GitHub Actions runs this suite on Python 3.12 on Ubuntu and Windows for pull
+requests and manual dispatch. Failed runs upload `.e2e-artifacts/` diagnostics.
+Future real-provider fixtures must come from explicitly authorized, recorded
+runs and be reviewed and redacted before being committed; see issue #15.
 
 ## Tool architecture
 
@@ -172,7 +190,11 @@ need Bash or download separate hook repositories. Package installation still nee
 network access. Keep the environment active when committing.
 
 Checks include Ruff lint/format, whitespace/EOF, merge conflicts, large files,
-TOML/JSON/YAML syntax, and the complete offline pytest suite on every commit.
+TOML/JSON/YAML syntax, and the offline `tests/` pytest suite on every commit.
+The separate process-level suite is run explicitly with `python -m pytest e2e -q`;
+it is not part of the pre-commit pytest hook or the existing four `checks` jobs.
+The new `e2e` workflow initially remains non-required; administrators can add its
+checks to branch protection after observing stable runs.
 Python uses 4-space indentation, default double quotes, sorted imports, and a
 100-character line width. Ruff E501 rejects overlong lines (with Ruff's built-in
 exceptions such as single unbreakable words and qualifying URL lines); formatting

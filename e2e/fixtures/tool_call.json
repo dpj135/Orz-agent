@@ -1,0 +1,27 @@
+{
+  "id": "synthetic-tool-completion",
+  "object": "chat.completion",
+  "created": 0,
+  "model": "synthetic-e2e-model",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "synthetic-call-1",
+            "type": "function",
+            "function": {
+              "name": "write_file",
+              "arguments": "{\"path\": \"answer.txt\", \"content\": \"Written by synthetic E2E.\\n\"}"
+            }
+          }
+        ]
+      },
+      "finish_reason": "tool_calls"
+    }
+  ],
+  "usage": {"prompt_tokens": 20, "completion_tokens": 15, "total_tokens": 35}
+}
