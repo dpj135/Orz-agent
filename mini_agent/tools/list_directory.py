@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..text_safety import replace_unpaired_surrogates
 from ..tool_execution_context import DIRECTORY_ENTRY_LIMIT, ToolExecutionContext
 from .base import BaseTool
 
@@ -48,5 +47,7 @@ class ListDirectoryTool(BaseTool):
         path = context.policy.path(arguments["path"])
         if not path.is_dir():
             raise FileNotFoundError(arguments["path"])
-        entries = sorted(replace_unpaired_surrogates(entry.name)[0] for entry in path.iterdir())
-        return {"ok": True, "entries": entries[:DIRECTORY_ENTRY_LIMIT]}
+        return {
+            "ok": True,
+            "entries": sorted(p.name for p in path.iterdir())[:DIRECTORY_ENTRY_LIMIT],
+        }

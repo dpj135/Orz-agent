@@ -6,8 +6,6 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from .text_safety import sanitize_and_report
-
 
 @dataclass
 class ModelClient:
@@ -24,10 +22,9 @@ class ModelClient:
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
-        payload = sanitize_and_report(body, "outbound request")
         request = urllib.request.Request(
             url,
-            data=json.dumps(payload).encode(),
+            data=json.dumps(body).encode(),
             method="POST",
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
         )

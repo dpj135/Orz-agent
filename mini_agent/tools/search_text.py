@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import codecs
+import json
 from typing import Any
 
 from .. import file_search
-from ..text_safety import json_size, replace_unpaired_surrogates
 from ..tool_execution_context import ToolExecutionContext
 from .base import BaseTool
 
@@ -89,12 +89,15 @@ class SearchTextTool(BaseTool):
             except OSError:
                 truncated = True
                 continue
-            relative, _ = replace_unpaired_surrogates(path.relative_to(workspace).as_posix())
             for number, line in enumerate(text.splitlines(), 1):
                 if pattern not in line:
                     continue
-                match = {"path": relative, "line": number, "text": line}
-                size = json_size(match) + 2
+                match = {
+                    "path": path.relative_to(workspace).as_posix(),
+                    "line": number,
+                    "text": line,
+                }
+                size = len(json.dumps(match, ensure_ascii=False).encode("utf-8")) + 2
                 if len(matches) >= limit or used + size > budget:
                     return {"ok": True, "matches": matches, "truncated": True}
                 matches.append(match)

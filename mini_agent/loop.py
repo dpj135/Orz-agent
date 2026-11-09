@@ -4,7 +4,7 @@ import json
 from typing import Any, Callable
 
 from .skills import SkillCatalog
-from .text_safety import sanitize_and_report
+from .text_safety import sanitize_user_input
 from .tool_execution_context import Policy, ToolExecutionContext
 from .tool_registry import ToolRegistry
 
@@ -35,7 +35,7 @@ def run_turn(
     context = catalog.context()
     if context:
         messages.append({"role": "user", "content": context})
-    messages.append({"role": "user", "content": sanitize_and_report(user_text, "user input")})
+    messages.append({"role": "user", "content": sanitize_user_input(user_text)})
     for warning in catalog.warnings:
         on_event(f"[skills warning] {warning}")
     for step in range(max_steps):
@@ -43,7 +43,7 @@ def run_turn(
         choices = response.get("choices") or []
         if not choices or "message" not in choices[0]:
             raise RuntimeError("model response has no choices[0].message")
-        message = sanitize_and_report(choices[0]["message"], "assistant message")
+        message = choices[0]["message"]
         messages.append(message)
         calls = message.get("tool_calls") or []
         if not calls:
@@ -68,9 +68,7 @@ def run_turn(
                     "role": "tool",
                     "tool_call_id": call_id,
                     "name": name,
-                    "content": json.dumps(
-                        sanitize_and_report(result, f"tool result {name}"), ensure_ascii=False
-                    ),
+                    "content": json.dumps(result, ensure_ascii=False),
                 }
             )
     raise RuntimeError(f"work loop exceeded max_steps={max_steps}")

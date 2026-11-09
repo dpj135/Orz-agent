@@ -34,17 +34,12 @@ This is an MVP, not a strong OS sandbox. Keep the workspace and API endpoint tru
 
 ## Unicode handling
 
-Terminal input and workspace file names can carry undecodable bytes that Python
-keeps as unpaired surrogates (U+D800–U+DFFF). JSON forbids them, so a strict
-gateway rejects the whole request with 400. Text is sanitized where it enters
-the conversation — user input, tool results and assistant replies — replacing
-each unpaired surrogate with U+FFFD and logging one warning that names the
-affected field and replacement count, never the text. Stored history is
-therefore clean, so later steps that resend it do not warn again; the client
-repeats the check before serializing as a last resort. Valid surrogate pairs,
-Chinese and emoji text are preserved byte-for-byte, and the wire format stays
-ASCII-escaped. Replacement is lossy: the model sees `�` where the original
-bytes were damaged, and clean requests stay silent.
+Terminal input can carry undecodable bytes that Python keeps as unpaired
+surrogates (U+D800–U+DFFF). JSON forbids them, so a strict gateway rejects the
+whole request with 400. The prompt is sanitized once when it enters the
+conversation: each unpaired surrogate becomes U+FFFD and one warning records the
+replacement count, never the text. Clean prompts stay silent. Tool results and
+assistant replies are trusted and passed through unchanged.
 
 ## Workspace instructions and skills
 
