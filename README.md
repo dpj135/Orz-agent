@@ -32,6 +32,15 @@ This is an MVP, not a strong OS sandbox. Keep the workspace and API endpoint tru
 - Tool-call JSON parsing, bounded steps, workspace path checks, and bounded output.
 - No multi-agent collaboration yet; that is a later iteration.
 
+## Unicode handling
+
+Terminal input can carry undecodable bytes that Python keeps as unpaired
+surrogates (U+D800–U+DFFF). JSON forbids them, so a strict gateway rejects the
+whole request with 400. The prompt is sanitized once when it enters the
+conversation: each unpaired surrogate becomes U+FFFD and one warning records the
+replacement count, never the text. Clean prompts stay silent. Tool results and
+assistant replies are trusted and passed through unchanged.
+
 ## Workspace instructions and skills
 
 At the start of **each task**, Python reads the workspace root `AGENTS.md` and

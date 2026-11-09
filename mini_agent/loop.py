@@ -4,6 +4,7 @@ import json
 from typing import Any, Callable
 
 from .skills import SkillCatalog
+from .text_safety import sanitize_user_input
 from .tool_execution_context import Policy, ToolExecutionContext
 from .tool_registry import ToolRegistry
 
@@ -34,7 +35,7 @@ def run_turn(
     context = catalog.context()
     if context:
         messages.append({"role": "user", "content": context})
-    messages.append({"role": "user", "content": user_text})
+    messages.append({"role": "user", "content": sanitize_user_input(user_text)})
     for warning in catalog.warnings:
         on_event(f"[skills warning] {warning}")
     for step in range(max_steps):
