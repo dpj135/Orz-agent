@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,6 +19,23 @@ DEFAULT_RESULTS = 5
 MAX_SNIPPET_BYTES = 2000
 MAX_TITLE_BYTES = 300
 MAX_URL_CHARACTERS = 4096
+
+
+def escape_source_text(text: str) -> str:
+    """Render unsafe Unicode categories visibly without interpreting terminal controls.
+
+    Args:
+        text: Untrusted provider title or snippet.
+
+    Returns:
+        Text with control/format/surrogate characters escaped, except newline.
+    """
+    return "".join(
+        character.encode("unicode_escape").decode("ascii")
+        if character != "\n" and unicodedata.category(character) in {"Cc", "Cf", "Cs"}
+        else character
+        for character in text
+    )
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -107,12 +125,17 @@ class SearchClient:
                 truncated = True
                 continue
             try:
+                url.encode("utf-8")
                 parsed = urllib.parse.urlsplit(url)
-                valid = parsed.scheme in {"http", "https"} and parsed.hostname
+                valid = parsed.scheme in {"http", "https"} and bool(parsed.hostname)
                 valid = valid and not parsed.username and not parsed.password
-            except ValueError:
+                # Accessing port validates numeric syntax and range, unlike urlsplit alone.
+                parsed.port
+            except (ValueError, UnicodeError):
                 valid = False
-            if not valid or any(ord(c) < 32 for c in url):
+            if not valid or any(
+                c.isspace() or unicodedata.category(c) in {"Cc", "Cf", "Cs"} for c in url
+            ):
                 truncated = True
                 continue
             if url in seen:
@@ -126,7 +149,9 @@ class SearchClient:
                 text = item.get(remote) or ""
                 if not isinstance(text, str):
                     raise ValueError("search API returned invalid source text")
-                encoded = text.encode("utf-8", "replace")
+                safe_text = escape_source_text(text)
+                truncated |= safe_text != text
+                encoded = safe_text.encode("utf-8", "replace")
                 truncated |= len(encoded) > cap
                 source[key] = encoded[:cap].decode("utf-8", "ignore")
             if len(results) >= max_results or len(

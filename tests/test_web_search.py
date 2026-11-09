@@ -66,9 +66,18 @@ def test_search_request_and_normalized_sources(tmp_path, monkeypatch):
     "args",
     [{}, {"query": "  "}, {"query": "x", "max_results": 11}, {"query": "x", "max_results": True}],
 )
-def test_search_validation(tmp_path, args):
-    result = ToolRegistry.discover().execute("web_search", args, ctx(tmp_path))
+def test_search_validation(tmp_path, args, monkeypatch):
+    opened = []
+    approved = []
+    monkeypatch.setattr("urllib.request.OpenerDirector.open", lambda *a, **k: opened.append(a))
+    context = ToolExecutionContext(
+        Policy(tmp_path, allow_web_search=True), lambda text: approved.append(text) or True
+    )
+    result = ToolRegistry.discover().execute("web_search", args, context)
     assert not result["ok"]
+    assert result["error"].startswith("ValueError:")
+    assert opened == []
+    assert approved == []
 
 
 def test_search_requires_opt_in_and_key(tmp_path, monkeypatch):
@@ -94,7 +103,19 @@ def test_search_http_error_does_not_leak_body(tmp_path, monkeypatch):
 
 
 def test_search_redirect_is_not_followed(tmp_path, monkeypatch):
+    import urllib.request
+
     from mini_agent.search_client import NoRedirect
+
+    build = urllib.request.build_opener
+    handlers = []
+
+    def capture_opener(*args):
+        opener = build(*args)
+        handlers.extend(type(handler) for handler in opener.handlers)
+        return opener
+
+    monkeypatch.setattr("urllib.request.build_opener", capture_opener)
 
     assert (
         NoRedirect().redirect_request(None, None, 302, "redirect", {}, "https://untrusted.example")
@@ -107,6 +128,9 @@ def test_search_redirect_is_not_followed(tmp_path, monkeypatch):
     monkeypatch.setattr("urllib.request.OpenerDirector.open", fail)
     result = call(tmp_path, {"query": "x"}, monkeypatch, allow_web_search=True)
     assert not result["ok"]
+    assert result["error"].startswith("RuntimeError: search API failed (HTTP 302)")
+    assert NoRedirect in handlers
+    assert urllib.request.HTTPRedirectHandler not in handlers
 
 
 def test_search_does_not_accept_non_http_urls(tmp_path, monkeypatch):
@@ -119,13 +143,18 @@ def test_search_does_not_accept_non_http_urls(tmp_path, monkeypatch):
 
 
 def test_refusal_never_sends_request(tmp_path, monkeypatch):
-    def forbidden(*args, **kwargs):
-        raise AssertionError("network must not be called")
-
-    monkeypatch.setattr("urllib.request.OpenerDirector.open", forbidden)
-    context = ToolExecutionContext(Policy(tmp_path, allow_web_search=True), lambda _: False)
+    opened = []
+    approved = []
+    monkeypatch.setenv("TAVILY_API_KEY", "test-only")
+    monkeypatch.setattr("urllib.request.OpenerDirector.open", lambda *a, **k: opened.append(a))
+    context = ToolExecutionContext(
+        Policy(tmp_path, allow_web_search=True), lambda text: approved.append(text) or False
+    )
     result = ToolRegistry.discover().execute("web_search", {"query": "private"}, context)
     assert not result["ok"]
+    assert result["error"].startswith("PermissionError:")
+    assert len(approved) == 1
+    assert opened == []
 
 
 @pytest.mark.parametrize("payload", [{}, {"results": "bad"}, {"results": [None]}])
@@ -167,3 +196,62 @@ def test_oversized_response_rejected(monkeypatch):
     monkeypatch.setattr("urllib.request.OpenerDirector.open", lambda *a, **k: Large())
     with pytest.raises(ValueError, match="exceeds"):
         SearchClient("test-only").search("x", 5, 100)
+
+
+def test_disabled_search_never_approves_or_connects(tmp_path, monkeypatch):
+    opened, approved = [], []
+    monkeypatch.setenv("TAVILY_API_KEY", "test-only")
+    monkeypatch.setattr("urllib.request.OpenerDirector.open", lambda *a, **k: opened.append(a))
+    context = ToolExecutionContext(Policy(tmp_path), lambda text: approved.append(text) or True)
+    result = ToolRegistry.discover().execute("web_search", {"query": "private"}, context)
+    assert result["error"].startswith("PermissionError:")
+    assert opened == [] and approved == []
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    ["/\ud800", "/a b", "/\x7f", "/\x85", "/\u202e", "/\u200b", ":bad/path", ":99999/path"],
+)
+def test_bad_url_preserves_valid_sources(monkeypatch, suffix):
+    monkeypatch.setattr(
+        "urllib.request.OpenerDirector.open",
+        lambda *a, **k: response(
+            {
+                "results": [
+                    {"url": "https://example.com/good"},
+                    {"url": "https://example.com" + suffix},
+                    {"url": "https://example.com/also-good"},
+                ]
+            }
+        ),
+    )
+    result = SearchClient("test-only").search("x", 5, 10000)
+    assert result["ok"] and result["truncated"]
+    assert [s["url"] for s in result["results"]] == [
+        "https://example.com/good",
+        "https://example.com/also-good",
+    ]
+
+
+def test_source_controls_are_visible_and_budgeted(monkeypatch):
+    monkeypatch.setattr(
+        "urllib.request.OpenerDirector.open",
+        lambda *a, **k: response(
+            {
+                "results": [
+                    {
+                        "url": "https://example.com",
+                        "title": "A\x1b[31m\rB",
+                        "content": "line\nnext\u202e\ud800",
+                    }
+                ]
+            }
+        ),
+    )
+    result = SearchClient("test-only").search("x", 5, 10000)
+    source = result["results"][0]
+    assert source["title"] == r"A\x1b[31m\rB"
+    assert source["snippet"] == "line\nnext" + r"\u202e\ud800"
+    assert result["truncated"]
+    assert len(source["title"].encode("utf-8")) <= 300
+    assert len(source["snippet"].encode("utf-8")) <= 2000

@@ -40,7 +40,13 @@ Arguments: `{"query":"Python release notes","max_results":5}`. Queries must be
 nonempty and at most 1,000 characters; results default to 5 and are capped at 10.
 The tool returns provider, title, URL and snippet, with deduplication and a
 `truncated` flag. It does not fetch result pages or generate a separate answer.
-No publication date is invented when the provider has not supplied one.
+Results do not include a publication-date field.
+
+The existing `run_command` tool inherits the full process environment: an approved
+child process can read `TAVILY_API_KEY` and other credentials. Its current approval
+prompt shows the program name, not full arguments. Do not enable command execution
+for untrusted workspaces; search permission does not isolate credentials from an
+independently approved command.
 
 Search is disabled unless `--allow-web-search` is supplied, and every call still
 requires interactive approval showing the query and provider. Only that query,
@@ -54,7 +60,12 @@ settings are honored, so keep proxy configuration trusted.
 
 HTTP reads are capped at 512 KiB before JSON parsing; socket timeout is 20 seconds
 (not a strict total wall-clock deadline). Titles/snippets are capped at 300/2,000
-UTF-8 bytes and the result array uses the policy byte budget. HTTP errors and
+UTF-8 bytes and the result array uses the policy byte budget. URLs containing
+control/format/surrogate characters, whitespace or invalid ports are skipped;
+other valid sources are retained. Titles/snippets escape dangerous Unicode
+characters visibly (normal newlines are retained) before byte limits are applied.
+Sanitization also sets `truncated`; this is not a general terminal-output sandbox.
+HTTP errors and
 transport failures return sanitized messages without response bodies or credentials.
 The work loop remains bounded by model steps, not a separate search/spend quota.
 Returned text is untrusted external data, never an instruction; cite actual result
