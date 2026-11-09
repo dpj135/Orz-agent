@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 
-REPOSITORY = Path(__file__).resolve().parents[1]
+REPOSITORY = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).parent / "fixtures"
 PROCESS_TIMEOUT_SECONDS = 20
 STARTUP_TIMEOUT_SECONDS = 5

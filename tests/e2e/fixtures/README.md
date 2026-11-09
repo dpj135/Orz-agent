@@ -13,7 +13,7 @@ Synthetic edge-case samples should remain even after real samples are added.
 Run explicitly from the repository root:
 
 ```console
-python -m pytest e2e -q
+python -m pytest tests/e2e -q
 ```
 
 The suite only contacts a standard-library HTTP server bound to a random port on

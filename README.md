@@ -84,14 +84,14 @@ Run offline tests (no API key required):
 python -m pytest
 ```
 
-Process-level E2E tests are intentionally kept outside `tests/` so local
+Process-level E2E tests live in `tests/e2e/`, excluded from default recursive discovery so local
 pre-commit checks remain fast and offline. They start a local-only mock
 OpenAI-compatible server and a real `mini_agent` subprocess; no real model or
 API key is used. The replay responses are synthetic, hand-authored protocol
 fixtures (not recordings from a provider):
 
 ```sh
-python -m pytest e2e -q
+python -m pytest tests/e2e -q
 ```
 
 GitHub Actions runs this suite on Python 3.12 on Ubuntu and Windows for pull
@@ -191,7 +191,7 @@ network access. Keep the environment active when committing.
 
 Checks include Ruff lint/format, whitespace/EOF, merge conflicts, large files,
 TOML/JSON/YAML syntax, and the offline `tests/` pytest suite on every commit.
-The separate process-level suite is run explicitly with `python -m pytest e2e -q`;
+The separate process-level suite is run explicitly with `python -m pytest tests/e2e -q`;
 it is not part of the pre-commit pytest hook or the existing four `checks` jobs.
 The new `e2e` workflow initially remains non-required; administrators can add its
 checks to branch protection after observing stable runs.
