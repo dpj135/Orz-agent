@@ -26,6 +26,7 @@ def test_discovery_and_schema_copy():
         "run_pytest",
         "search_text",
         "skill",
+        "web_search",
         "write_file",
     ]
     schemas = registry.schemas()
@@ -116,7 +117,7 @@ def test_process_permission_and_invocation(tmp_path, monkeypatch):
 def test_workspace_python_is_never_imported(tmp_path, monkeypatch):
     (tmp_path / "read_file.py").write_text("raise RuntimeError('untrusted')")
     monkeypatch.chdir(tmp_path)
-    assert len(ToolRegistry.discover().schemas()) == 9
+    assert len(ToolRegistry.discover().schemas()) == 10
 
 
 def test_concrete_tools_do_not_import_each_other():
