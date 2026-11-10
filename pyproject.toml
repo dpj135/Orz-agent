@@ -22,6 +22,8 @@ select = ["E4", "E7", "E9", "E501", "F", "I"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Explicit `pytest tests/e2e` still runs the process-level suite.
+norecursedirs = ["e2e", ".*", "build", "dist", "*.egg", "_darcs", "CVS", "node_modules", "venv", "{arch}"]
 pythonpath = ["."]
 
 [tool.setuptools.packages.find]
