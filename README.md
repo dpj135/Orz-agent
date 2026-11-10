@@ -95,7 +95,10 @@ python -m pytest tests/e2e -q
 ```
 
 GitHub Actions runs this suite on Python 3.12 on Ubuntu and Windows for pull
-requests and manual dispatch. Failed runs upload `.e2e-artifacts/` diagnostics.
+requests and manual dispatch. Each run attempts to upload `e2e-artifacts/`
+diagnostics, whether tests pass or fail; available artifacts are retained for
+7 days. Missing diagnostic files produce an upload warning rather than being
+silently ignored.
 Future real-provider fixtures must come from explicitly authorized, recorded
 runs and be reviewed and redacted before being committed; see issue #15.
 

@@ -98,7 +98,8 @@ def validate_request(body: Any) -> None:
         required = parameters.get("required")
         if not isinstance(required, list) or not all(isinstance(item, str) for item in required):
             raise ValueError("tool parameters need a required array")
-    if body.get("tool_choice") not in {"auto", "none", "required"}:
+    choice = body.get("tool_choice")
+    if not isinstance(choice, str) or choice not in {"auto", "none", "required"}:
         raise ValueError("tool_choice must be a supported string")
 
 
@@ -137,6 +138,7 @@ class MockLLM:
         self.requests: list[dict[str, Any]] = []
         self.errors: list[str] = []
         self.consumed = 0
+        self.received = 0
         self.lock = threading.Lock()
         owner = self
 
@@ -169,7 +171,8 @@ class MockLLM:
                         if not 0 < size <= MAX_REQUEST_BYTES:
                             raise ValueError("invalid request size")
                         raw = self.rfile.read(size)
-                        index = len(owner.requests)
+                        index = owner.received
+                        owner.received += 1
                         (owner.artifacts / f"request-{index}.json").write_bytes(raw)
                         body = decode_request(raw)
                         owner.requests.append(body)
@@ -219,8 +222,12 @@ def mock_llm(tmp_path: Path) -> Iterator[Callable[[list[Reply]], MockLLM]]:
         directory = tmp_path / f"http-{len(servers)}"
         directory.mkdir()
         server = MockLLM(replies, directory)
+        try:
+            server.start()
+        except BaseException:
+            server.close()
+            raise
         servers.append(server)
-        server.start()
         return server
 
     yield create
@@ -275,6 +282,9 @@ def cli(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[str]]:
         for name in list(environment):
             if name.upper().startswith("AGENT_"):
                 environment.pop(name)
+        environment["PATH"] = (
+            str(Path(sys.executable).parent) + os.pathsep + environment.get("PATH", "")
+        )
         # Enforce predictable decoding even on Windows. surrogatepass lets the
         # regression inject a real surrogate through stdin, not a product mock.
         environment.update(

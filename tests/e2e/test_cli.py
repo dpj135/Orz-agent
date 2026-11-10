@@ -42,6 +42,7 @@ def test_one_shot(mock_llm: ServerFactory, cli: CLIRunner) -> None:
     assert_clean_exit(result)
     assert "Synthetic E2E answer." in result.stdout
     assert len(server.requests) == 1
+    assert server.requests[0]["model"] == "synthetic-e2e-model"
     assert server.requests[0]["messages"][-1] == {
         "role": "user",
         "content": "Synthetic test prompt",
@@ -140,6 +141,32 @@ def test_command_denied(
     assert not (tmp_path / "workspace" / "side-effect.txt").exists()
 
 
+def test_command_approved(mock_llm: ServerFactory, cli: CLIRunner, tmp_path: Path) -> None:
+    response = tool_response(
+        "run_command",
+        {
+            "program": "python",
+            "args": [
+                "-c",
+                "from pathlib import Path; "
+                "Path('command-result.txt').write_text('approved', encoding='utf-8'); "
+                "print('synthetic command completed')",
+            ],
+        },
+    )
+    server = mock_llm([Reply(response), Reply(completion_fixture())])
+    assert_clean_exit(cli(server, stdin="y\n", flags=("--allow-command",)))
+    result = tool_result(server)
+    assert result["ok"] is True
+    assert result["returncode"] == 0
+    assert result["stdout"]["text"].strip() == "synthetic command completed"
+    assert result["stdout"]["truncated"] is False
+    assert result["stderr"] == {"text": "", "truncated": False}
+    assert (tmp_path / "workspace" / "command-result.txt").read_text(encoding="utf-8") == (
+        "approved"
+    )
+
+
 def test_max_steps(mock_llm: ServerFactory, cli: CLIRunner, tmp_path: Path) -> None:
     server = mock_llm([Reply(completion_fixture("tool_call"))])
     result = cli(server, flags=("--max-steps", "1"))
@@ -209,6 +236,9 @@ def test_protocol_decoder_rejects_invalid_json(raw: bytes) -> None:
         ("tools", {}, "tools"),
         ("tools", [{"type": "invalid"}], "type=function"),
         ("tool_choice", "invalid", "tool_choice"),
+        ("tool_choice", {"type": "function"}, "tool_choice"),
+        ("tool_choice", ["auto"], "tool_choice"),
+        ("tool_choice", 123, "tool_choice"),
     ],
 )
 def test_protocol_validator_rejects_invalid_structure(field: str, value: Any, message: str) -> None:

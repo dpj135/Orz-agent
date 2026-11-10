@@ -21,8 +21,11 @@ The suite only contacts a standard-library HTTP server bound to a random port on
 no application functions are monkeypatched or imported into the harness. Every
 case has a private workspace, closes its server, and bounds CLI runtime. CLI
 stdout/stderr/status and raw JSON HTTP request bodies (never authorization headers)
-are saved under pytest's per-test temporary directory. CI can retain those using
-`--basetemp=.e2e-artifacts` and `--junitxml=.e2e-artifacts/results.xml`.
+are saved under pytest's per-test temporary directory. CI uses
+`--basetemp=e2e-artifacts` and `--junitxml=e2e-artifacts/results.xml` and attempts
+to upload the diagnostic directory after every run, whether tests pass or fail.
+Artifacts are retained for 7 days. The `e2e-artifacts/` directory is ignored by
+Git so the same command can be used locally without staging diagnostic files.
 
 The Unicode regression feeds surrogatepass-encoded stdin to the actual REPL,
 with an explicit child stdin decoding policy so it exercises the same invalid
