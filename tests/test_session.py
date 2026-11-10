@@ -98,8 +98,11 @@ def test_case_distinct_ids(store: SessionStore, tmp_path: Path) -> None:
 
 
 def test_missing_resume_does_not_create(store: SessionStore) -> None:
-    with pytest.raises(SessionError):
+    with pytest.raises(SessionError) as error:
         store.resume("missing")
+    assert "session 'missing' not found" in str(error.value)
+    assert str(store.root) in str(error.value)
+    assert hashlib.sha256(b"missing").hexdigest() not in str(error.value)
     assert not store.root.exists()
 
 
@@ -551,3 +554,130 @@ def test_atomic_save_interrupt_preserves_checkpoint_and_cleans_temporary(
         assert not list(session.path.glob(".checkpoint-*.tmp"))
     with store.resume("save-interrupted") as resumed:
         assert resumed.messages == INITIAL
+
+
+@pytest.mark.parametrize(
+    "assistant",
+    [
+        {"role": "assistant", "content": None},
+        {"role": "assistant", "content": None, "refusal": "I cannot help with that."},
+        {"role": "assistant", "content": None, "refusal": None},
+        {"role": "assistant", "refusal": "No."},
+    ],
+)
+def test_assistant_null_content_roundtrip(
+    store: SessionStore, tmp_path: Path, assistant: dict[str, Any]
+) -> None:
+    messages = INITIAL + [{"role": "user", "content": "hello"}, assistant]
+    with store.create(tmp_path, INITIAL, "null-content") as session:
+        session.commit_messages(messages)
+    with store.resume("null-content") as resumed:
+        assert resumed.messages == messages
+
+
+@pytest.mark.parametrize("refusal", [False, 7, [], {}])
+def test_invalid_refusal_preserves_checkpoint(
+    store: SessionStore, tmp_path: Path, refusal: Any
+) -> None:
+    with store.create(tmp_path, INITIAL, "bad-refusal") as session:
+        checkpoint = session.path / "checkpoint.json"
+        before = checkpoint.read_bytes()
+        with pytest.raises(SessionError, match="refusal"):
+            session.commit_messages(
+                INITIAL + [{"role": "assistant", "content": None, "refusal": refusal}]
+            )
+        assert session.messages == INITIAL
+        assert checkpoint.read_bytes() == before
+
+
+@pytest.mark.parametrize("role", ["system", "developer", "user", "tool"])
+def test_null_content_still_rejected_for_other_roles(
+    store: SessionStore, tmp_path: Path, role: str
+) -> None:
+    messages = INITIAL + [{"role": role, "content": None, "refusal": "not an assistant"}]
+    if role == "tool":
+        valid = tool_messages()
+        messages = valid[:3] + [{**valid[3], "content": None}, valid[4]]
+    with store.create(tmp_path, INITIAL, "null-invalid") as session:
+        checkpoint = session.path / "checkpoint.json"
+        before = checkpoint.read_bytes()
+        with pytest.raises(SessionError, match="content"):
+            session.commit_messages(messages)
+        assert session.messages == INITIAL
+        assert checkpoint.read_bytes() == before
+
+
+def test_duplicate_pending_call_id_rejected_with_complete_results(
+    store: SessionStore, tmp_path: Path
+) -> None:
+    call = tool_messages()[2]["tool_calls"][0]
+    # One result satisfies every distinct ID; only the duplicate-call guard rejects this.
+    messages = INITIAL + [
+        {"role": "assistant", "content": None, "tool_calls": [call, copy.deepcopy(call)]},
+        {"role": "tool", "tool_call_id": "a", "name": "read", "content": "one"},
+        {"role": "assistant", "content": "done"},
+    ]
+    with store.create(tmp_path, INITIAL, "duplicate-call") as session:
+        before = (session.path / "checkpoint.json").read_bytes()
+        with pytest.raises(SessionError, match="invalid or duplicate tool call"):
+            session.commit_messages(messages)
+        assert session.messages == INITIAL
+        assert (session.path / "checkpoint.json").read_bytes() == before
+
+
+def test_completed_call_id_can_be_reused_in_later_messages(
+    store: SessionStore, tmp_path: Path
+) -> None:
+    messages = tool_messages() + tool_messages()[1:]
+    with store.create(tmp_path, messages, "reused-call"):
+        pass
+    with store.resume("reused-call") as resumed:
+        assert resumed.messages == messages
+
+
+def test_storage_root_expands_home_without_creating_literal_tilde(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.chdir(tmp_path)
+    store = SessionStore("~/sessions")
+    assert store.root == home / "sessions"
+    with store.create(tmp_path, INITIAL, "home"):
+        pass
+    assert store.root.is_dir()
+    assert not (tmp_path / "~").exists()
+
+
+def test_storage_root_file_reports_clear_error_without_modification(tmp_path: Path) -> None:
+    root = tmp_path / "not-a-directory"
+    root.write_bytes(b"unchanged")
+    with pytest.raises(SessionError, match="not a directory") as error:
+        SessionStore(root).create(tmp_path, INITIAL, "file-root")
+    assert str(root) in str(error.value)
+    assert root.read_bytes() == b"unchanged"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permits replacing an open lock inode")
+def test_replaced_lock_inode_rejects_writes_without_changing_checkpoint(
+    store: SessionStore, tmp_path: Path
+) -> None:
+    with store.create(tmp_path, INITIAL, "replaced-lock") as session:
+        checkpoint = session.path / "checkpoint.json"
+        before = checkpoint.read_bytes()
+        lock = session.path / "writer.lock"
+        held_inode = lock.stat().st_ino
+        replacement = session.path / "replacement.lock"
+        replacement.write_bytes(b"replacement")
+        assert replacement.stat().st_ino != held_inode
+        # Exact inspected paths are both inside this test's session directory.
+        os.replace(replacement, lock)
+        with pytest.raises(SessionError, match="writer lock was replaced"):
+            session.commit_messages(tool_messages())
+        with pytest.raises(SessionError, match="writer lock was replaced"):
+            session.record("must-not-be-written")
+        assert checkpoint.read_bytes() == before
+        assert session.messages == INITIAL
+        assert not (session.path / "history.jsonl").exists()

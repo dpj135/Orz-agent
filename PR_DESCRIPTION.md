@@ -32,10 +32,11 @@ history 不因压缩删除。不记录鉴权配置、HTTP 鉴权头或完整环�
 
 ## 验证结果
 
-- Windows / Python 3.12：`python -m pytest -q -rs`：197 passed，7 skipped。
+- Windows / Python 3.12：`python -m pytest -q -rs`：229 passed，8 skipped。
 - `python -m pre_commit run --all-files` 全部适用钩子通过；JSON 检查因无匹配文件跳过。
 - 真实 CLI 子进程 + loopback HTTP 验证新建/重启恢复、稳定前缀与缓存键、显式禁用、重复 ID、400 拒绝只请求一次并提示关闭方式。全部 synthetic fixtures，无真实 API 调用。
-- Windows 跨进程锁、正常/异常退出释放、junction/reparse 拒绝实测通过。7 个跳过为 6 个 symlink 权限不足用例和 1 个 POSIX 权限用例；Linux/macOS 未本机验证，Windows/Linux CI 待 PR 检查。
+- Windows 跨进程锁、正常/异常退出释放、junction/reparse 拒绝实测通过。8 个跳过为 6 个 symlink 权限不足用例、1 个 POSIX 权限用例及 1 个 POSIX 锁 inode 替换用例；Linux/macOS 未本机验证，新增 POSIX 测试由 Linux CI 验证。
+- 评审修复：工具执行前规范化兼容调用（缺 type/id、对象 arguments），整批提前拒绝重复 ID/非法结构；history 保留原始响应。合法拒答、空内容、文本 parts 可显示及恢复。交互 completed 与保存错误分开记录（checkpoint_error），不写矛盾的 turn_end；~ 展开及可读错误提示已补充。
 - 基于 origin/main 开发，不夹带尚未合并的 issue #13 E2E 分支改动。修正 `python -m mini_agent` 未传播 main 返回码的问题，使 CLI 失败正确退出非零。
 
 ## 已知限制

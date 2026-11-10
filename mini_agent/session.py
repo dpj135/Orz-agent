@@ -111,6 +111,8 @@ def _directory(path: Path, *, create: bool = False) -> None:
         None. Missing or unsafe directories raise; Windows permissions follow ACLs.
     """
     _check_path(path)
+    if path.exists() and not path.is_dir():
+        raise SessionError(f"not a directory: {path}")
     if create:
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
     _check_path(path)
@@ -188,10 +190,11 @@ def _validate_messages(messages: Any) -> list[dict[str, Any]]:
         }:
             raise SessionError("invalid message role")
         content = message.get("content")
-        if not isinstance(content, (str, list)) and not (
-            content is None and role == "assistant" and message.get("tool_calls")
-        ):
+        if not isinstance(content, (str, list)) and not (content is None and role == "assistant"):
             raise SessionError("invalid or missing message content")
+        refusal = message.get("refusal")
+        if refusal is not None and not isinstance(refusal, str):
+            raise SessionError("refusal must be text or null")
         if pending and role != "tool":
             raise SessionError("tool calls must all have results before another message")
         if role == "tool":
@@ -271,12 +274,12 @@ class SessionStore:
         """Choose a session storage root without creating it.
 
         Args:
-            root: Storage directory override, or None for the platform default.
+            root: Storage directory override with home expansion, or the platform default.
 
         Returns:
             None.
         """
-        self.root = _absolute(default_session_root() if root is None else root)
+        self.root = _absolute(Path(default_session_root() if root is None else root).expanduser())
 
     def _prepare(self) -> None:
         """Create and check the root, applying private POSIX directory permissions.
@@ -368,6 +371,9 @@ class SessionStore:
         path = self._path(session_id)
         session: Session | None = None
         try:
+            _check_path(path)
+            if not path.exists():
+                raise SessionError(f"session {session_id!r} not found under {self.root}")
             _directory(path)
             session = Session(path, {"session_id": session_id})
             session._data = self._read(path, session_id)

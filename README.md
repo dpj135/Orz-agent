@@ -71,7 +71,23 @@ Skill bodies are still loaded on demand from the current workspace.
 History records user inputs, parsed LLM responses, tool starts/results/errors and
 turn outcomes as events occur. It is independent of messages: it is not replayed,
 not used to repair context, and will not be erased by future context compression.
-There is no checkpoint-to-log event sequence binding. A crash can leave an
+There is no checkpoint-to-log event sequence binding. `turn_end` describes the
+interaction outcome, not durable checkpoint success. A later save failure records
+`checkpoint_error` and reports that the answer was generated but context was not
+saved; it does not append a contradictory failed interaction outcome.
+
+Before executing any tool in a response, compatible calls are normalized in a
+copy: absent types become `function`, absent IDs receive nonconflicting IDs, and
+object arguments become JSON text. Duplicate IDs or unsupported structures reject
+the entire batch before execution. History retains the original parsed response.
+Assistant refusals and empty content remain resumable; the terminal displays text
+parts or refusal text without replacing the saved message structure.
+
+`--session-dir` expands `~` but does not resolve away linked path components.
+Storage paths and their ancestors must not contain symlinks or reparse points,
+including system aliases such as macOS `/tmp`; use their physical paths instead.
+
+A crash can leave an
 unfinished event or a partial final log line; logging is not a transaction or an
 exactly-once execution guarantee. A successful tool can have changed files even
 when its turn was never checkpointed. Resume neither rolls back such effects nor
