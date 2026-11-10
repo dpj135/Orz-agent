@@ -23,7 +23,14 @@ SYSTEM = (
 
 
 def initial_messages(policy: Policy) -> list[dict[str, Any]]:
-    """Construct the initial context once, never again during session resume."""
+    """Construct base instructions and workspace context for a new session.
+
+    Args:
+        policy: Workspace used to discover guidance and skill summaries.
+
+    Returns:
+        Independent initial message list; resumed sessions use saved messages instead.
+    """
     messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM}]
     context = SkillCatalog.discover(policy.workspace).context()
     if context:
@@ -41,6 +48,20 @@ def run_turn(
     *,
     session: Session | None = None,
 ) -> str:
+    """Run one model/tool turn and checkpoint its completed input context.
+
+    Args:
+        user_text: Original user input, logged before model-input sanitization.
+        client: Model client exposing complete(messages, tools).
+        policy: Workspace and permissions used for tool execution.
+        confirm: Callback obtaining approval for protected tool operations.
+        max_steps: Maximum number of model requests in this turn.
+        on_event: Callback displaying warnings, tool names and the final answer.
+        session: Optional open session for saved context and independent event logging.
+
+    Returns:
+        Final assistant content; execution and persistence errors are raised.
+    """
     catalog = SkillCatalog.discover(policy.workspace)
     registry = ToolRegistry.discover()
     tool_execution_context = ToolExecutionContext(policy, confirm, catalog)
@@ -48,6 +69,15 @@ def run_turn(
     messages = copy.deepcopy(session.messages) if session else initial_messages(policy)
 
     def record(event: str, **data: Any) -> None:
+        """Append an interaction event when a persistent session is available.
+
+        Args:
+            event: Event type identifying the interaction.
+            **data: JSON-compatible details written independently of model context.
+
+        Returns:
+            None.
+        """
         if session:
             session.record(event, **data)
 

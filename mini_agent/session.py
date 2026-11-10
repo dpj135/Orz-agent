@@ -26,12 +26,28 @@ class SessionError(RuntimeError):
 
 
 def validate_session_id(session_id: str) -> str:
+    """Validate the shared local identity and cache-key character limits.
+
+    Args:
+        session_id: Requested ID containing 1-64 ASCII letters, digits, '_' or '-'.
+
+    Returns:
+        The unchanged ID; invalid values raise SessionError.
+    """
     if not isinstance(session_id, str) or _ID_PATTERN.fullmatch(session_id) is None:
         raise SessionError("session ID must contain 1-64 ASCII letters, digits, '_' or '-'")
     return session_id
 
 
 def default_session_root() -> Path:
+    """Select the platform's default user-level session storage root.
+
+    Args:
+        None.
+
+    Returns:
+        An uncreated path using LOCALAPPDATA, XDG_DATA_HOME or the platform fallback.
+    """
     if sys.platform == "win32":
         base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
     elif sys.platform == "darwin":
@@ -42,15 +58,39 @@ def default_session_root() -> Path:
 
 
 def _now() -> str:
+    """Format the current UTC time with an explicit timezone offset.
+
+    Args:
+        None.
+
+    Returns:
+        An ISO-formatted timestamp string.
+    """
     return datetime.now(timezone.utc).isoformat()
 
 
 def _absolute(path: str | Path) -> Path:
+    """Make a path absolute without resolving symbolic links.
+
+    Args:
+        path: Filesystem path relative to the current directory or already absolute.
+
+    Returns:
+        A normalized absolute Path without expanding a user-home marker.
+    """
     return Path(os.path.abspath(os.fspath(path)))
 
 
 def _check_path(path: Path) -> None:
     # Defense in depth, not an OS sandbox against hostile directory-renaming races.
+    """Reject observed symbolic links and reparse points along a path.
+
+    Args:
+        path: Target whose existing components are inspected; missing ones are skipped.
+
+    Returns:
+        None. Checks raise on unsafe components but do not prevent rename races.
+    """
     for part in reversed((path, *path.parents)):
         try:
             info = part.lstat()
@@ -61,6 +101,15 @@ def _check_path(path: Path) -> None:
 
 
 def _directory(path: Path, *, create: bool = False) -> None:
+    """Check a directory and optionally create missing components.
+
+    Args:
+        path: Directory path checked for linked or reparse components.
+        create: Whether to create missing directories with a requested private mode.
+
+    Returns:
+        None. Missing or unsafe directories raise; Windows permissions follow ACLs.
+    """
     _check_path(path)
     if create:
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -70,6 +119,15 @@ def _directory(path: Path, *, create: bool = False) -> None:
 
 
 def _open(path: Path, flags: int) -> int:
+    """Open a checked regular file and reject observed linked components.
+
+    Args:
+        path: Existing regular file or a file to create according to flags.
+        flags: os.open flags, augmented with O_NOFOLLOW where available.
+
+    Returns:
+        A caller-owned descriptor with mode 0600 on POSIX. Checks are not race-free.
+    """
     _check_path(path)
     try:
         if not stat.S_ISREG(path.lstat().st_mode):
@@ -90,6 +148,14 @@ def _open(path: Path, flags: int) -> int:
 
 
 def _json_clone(value: Any) -> Any:
+    """Copy a value through JSON while rejecting non-finite numbers.
+
+    Args:
+        value: JSON-serializable data to copy independently.
+
+    Returns:
+        A decoded JSON copy; unsupported values raise SessionError.
+    """
     try:
         return json.loads(json.dumps(value, ensure_ascii=False, allow_nan=False))
     except (ValueError, TypeError, RecursionError) as exc:
@@ -97,6 +163,15 @@ def _json_clone(value: Any) -> Any:
 
 
 def _validate_messages(messages: Any) -> list[dict[str, Any]]:
+    """Check supported message shapes and complete tool-result pairing.
+
+    Args:
+        messages: Nonempty message sequence proposed for a resumable checkpoint.
+
+    Returns:
+        An independent JSON copy. Invalid roles, shapes or tool sequences raise;
+        this is not full provider-schema validation.
+    """
     if not isinstance(messages, list) or not messages:
         raise SessionError("messages must be a nonempty list")
     pending: dict[str, str] = {}
@@ -160,6 +235,15 @@ def _validate_messages(messages: Any) -> list[dict[str, Any]]:
 
 
 def _validate_checkpoint(data: Any, session_id: str) -> dict[str, Any]:
+    """Validate checkpoint fields, identity, timestamps and workspace.
+
+    Args:
+        data: Decoded checkpoint mapping, updated in place with copied messages.
+        session_id: Expected local session identity.
+
+    Returns:
+        The same mapping after validation; invalid or unavailable state raises.
+    """
     if not isinstance(data, dict) or set(data) != _FIELDS:
         raise SessionError("invalid checkpoint fields")
     if type(data["schema_version"]) is not int or data["schema_version"] != SCHEMA_VERSION:
@@ -181,16 +265,42 @@ def _validate_checkpoint(data: Any, session_id: str) -> dict[str, Any]:
 
 
 class SessionStore:
+    """Create and resume independently stored, single-writer local sessions."""
+
     def __init__(self, root: str | Path | None = None) -> None:
+        """Choose a session storage root without creating it.
+
+        Args:
+            root: Storage directory override, or None for the platform default.
+
+        Returns:
+            None.
+        """
         self.root = _absolute(default_session_root() if root is None else root)
 
     def _prepare(self) -> None:
+        """Create and check the root, applying private POSIX directory permissions.
+
+        Args:
+            None.
+
+        Returns:
+            None. Windows inherits directory ACLs rather than POSIX mode guarantees.
+        """
         _directory(self.root, create=True)
         # Windows chmod cannot express ACLs; inherit user-profile directory ACLs.
         if os.name != "nt":
             self.root.chmod(0o700)
 
     def _path(self, session_id: str) -> Path:
+        """Map a validated session ID to a fixed-length directory name.
+
+        Args:
+            session_id: Local identity to validate and hash as ASCII bytes.
+
+        Returns:
+            A path under the root named by the ID's SHA-256 hexadecimal digest.
+        """
         identity = validate_session_id(session_id).encode("ascii")
         return self.root / hashlib.sha256(identity).hexdigest()
 
@@ -200,6 +310,17 @@ class SessionStore:
         messages: list[dict[str, Any]],
         session_id: str | None = None,
     ) -> Session:
+        """Reserve a new identity and save its initial checkpoint while locked.
+
+        Args:
+            workspace: Existing unlinked directory saved as an absolute workspace path.
+            messages: Initial valid context, copied independently into the checkpoint.
+            session_id: Unused explicit identity, or None to generate a random UUID.
+
+        Returns:
+            An open Session whose writer lock the caller must close. Existing IDs fail;
+            a storage failure can leave a reserved directory rather than reuse it.
+        """
         session_id = str(uuid.uuid4()) if session_id is None else validate_session_id(session_id)
         session: Session | None = None
         try:
@@ -235,6 +356,15 @@ class SessionStore:
             raise SessionError(f"cannot create session: {exc}") from exc
 
     def resume(self, session_id: str) -> Session:
+        """Lock and load an existing valid checkpoint without replaying history.
+
+        Args:
+            session_id: Existing local identity; it is never implicitly created.
+
+        Returns:
+            An open Session using its saved messages and workspace. Missing, occupied,
+            corrupt or unsupported state raises and releases any acquired lock.
+        """
         path = self._path(session_id)
         session: Session | None = None
         try:
@@ -253,6 +383,15 @@ class SessionStore:
 
     @staticmethod
     def _read(path: Path, session_id: str) -> dict[str, Any]:
+        """Read one bounded checkpoint and validate its resumable state.
+
+        Args:
+            path: Existing session directory containing checkpoint.json.
+            session_id: Identity expected inside the checkpoint.
+
+        Returns:
+            A validated checkpoint mapping; oversized or invalid content raises.
+        """
         with os.fdopen(_open(path / "checkpoint.json", os.O_RDONLY), "rb") as stream:
             raw = stream.read(MAX_CHECKPOINT_BYTES + 1)
         if len(raw) > MAX_CHECKPOINT_BYTES:
@@ -268,6 +407,15 @@ class Session:
     """A single-writer session, held open for the entire interactive lifecycle."""
 
     def __init__(self, path: Path, data: dict[str, Any]) -> None:
+        """Acquire a nonblocking OS writer lock for the supplied session state.
+
+        Args:
+            path: Existing session directory in which writer.lock is opened or created.
+            data: Internal state mapping; resume may supply identity before loading data.
+
+        Returns:
+            None. Acquisition errors close the descriptor; data is not validated here.
+        """
         self.path = path
         self._data = data
         self._lock_fd: int | None = None
@@ -293,25 +441,73 @@ class Session:
 
     @property
     def session_id(self) -> str:
+        """Read the session identity used for local storage and cache routing.
+
+        Args:
+            None.
+
+        Returns:
+            The unchanged session ID from the internal state.
+        """
         return self._data["session_id"]
 
     @property
     def workspace(self) -> Path:
+        """Read the workspace saved with the session.
+
+        Args:
+            None.
+
+        Returns:
+            The saved workspace as a Path, without a fresh existence check.
+        """
         return Path(self._data["workspace"])
 
     @property
     def messages(self) -> list[dict[str, Any]]:
+        """Copy the currently committed model-input context.
+
+        Args:
+            None.
+
+        Returns:
+            A deep copy of messages, independent of subsequent caller mutations.
+        """
         return copy.deepcopy(self._data["messages"])
 
     @property
     def created_at(self) -> str:
+        """Read the session's saved creation time.
+
+        Args:
+            None.
+
+        Returns:
+            The stored timezone-aware ISO timestamp string.
+        """
         return self._data["created_at"]
 
     @property
     def updated_at(self) -> str:
+        """Read the timestamp of the latest committed state.
+
+        Args:
+            None.
+
+        Returns:
+            The stored timezone-aware ISO timestamp string.
+        """
         return self._data["updated_at"]
 
     def _ensure_open(self) -> None:
+        """Check the held lock and reject observed directory or lock replacement.
+
+        Args:
+            None.
+
+        Returns:
+            None. Closed or changed storage raises; checks do not eliminate races.
+        """
         if self._lock_fd is None:
             raise SessionError("session is closed")
         _directory(self.path)
@@ -322,6 +518,15 @@ class Session:
             raise SessionError("session writer lock was replaced")
 
     def _save(self, data: dict[str, Any]) -> None:
+        """Write a bounded temporary checkpoint and atomically replace its target.
+
+        Args:
+            data: JSON-compatible checkpoint mapping prepared by the caller.
+
+        Returns:
+            None. The temporary file is flushed and fsynced before replacement;
+            directory fsync and power-loss durability are not guaranteed.
+        """
         self._ensure_open()
         target = self.path / "checkpoint.json"
         _check_path(target)
@@ -346,6 +551,15 @@ class Session:
                     pass
 
     def commit_messages(self, messages: list[dict[str, Any]]) -> None:
+        """Validate and save context before updating the in-memory checkpoint.
+
+        Args:
+            messages: Complete model-input sequence to copy into a new checkpoint.
+
+        Returns:
+            None. Failures before replacement retain the previous checkpoint;
+            this does not roll back tool side effects or write interaction history.
+        """
         try:
             self._ensure_open()
             data = {**self._data, "messages": _validate_messages(messages), "updated_at": _now()}
@@ -355,7 +569,16 @@ class Session:
             raise SessionError(f"cannot save checkpoint: {exc}") from exc
 
     def record(self, event: str, **data: Any) -> None:
-        """Flush an appended event; a truncated prior tail is never parsed or repaired."""
+        """Append and flush an independent timestamped interaction event.
+
+        Args:
+            event: Nonempty event name.
+            **data: JSON-compatible details placed in the event's data mapping.
+
+        Returns:
+            None. A truncated prior tail is separated, not parsed or repaired;
+            flushing is not fsync, and no checkpoint or replay state is updated.
+        """
         if not isinstance(event, str) or not event:
             raise SessionError("event must be a nonempty string")
         try:
@@ -379,6 +602,14 @@ class Session:
             raise SessionError(f"cannot append history: {exc}") from exc
 
     def close(self) -> None:
+        """Release the writer lock and close its descriptor if still held.
+
+        Args:
+            None.
+
+        Returns:
+            None. Repeated calls do nothing; unlock failures still close the descriptor.
+        """
         fd = self._lock_fd
         if fd is None:
             return
@@ -397,8 +628,24 @@ class Session:
             os.close(fd)
 
     def __enter__(self) -> Session:
+        """Check the open session before entering a managed lifetime.
+
+        Args:
+            None.
+
+        Returns:
+            This session, still holding its existing writer lock.
+        """
         self._ensure_open()
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """Close the session when leaving a managed lifetime.
+
+        Args:
+            *args: Context-manager exception details, unused by cleanup.
+
+        Returns:
+            None. Exceptions from the managed block are not suppressed.
+        """
         self.close()

@@ -11,6 +11,14 @@ from .tools import Policy
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Describe model, permission and mutually exclusive session options.
+
+    Args:
+        None.
+
+    Returns:
+        CLI parser for one-shot and interactive execution.
+    """
     parser = argparse.ArgumentParser(description="A small single-agent CLI")
     parser.add_argument("prompt", nargs="?", help="one-shot prompt; omit for REPL")
     parser.add_argument(
@@ -35,6 +43,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Create or resume a single-writer session and run user prompts.
+
+    Args:
+        argv: Explicit command-line arguments, or None to use process arguments.
+
+    Returns:
+        Zero on normal exit, one on runtime failure, two for missing credentials,
+        or 130 on cancellation outside the interactive prompt handler.
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.max_steps < 1:

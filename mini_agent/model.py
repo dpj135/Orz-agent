@@ -17,6 +17,14 @@ class ModelClient:
     prompt_cache_key: str | None = None
 
     def __post_init__(self) -> None:
+        """Validate an optional cache key without depending on session storage.
+
+        Args:
+            None.
+
+        Returns:
+            None; invalid cache keys raise ValueError.
+        """
         # Match session IDs without coupling the HTTP adapter to session storage.
         if self.prompt_cache_key is not None and (
             not isinstance(self.prompt_cache_key, str)
